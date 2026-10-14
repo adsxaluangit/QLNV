@@ -1,0 +1,139 @@
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { AuditService, khacBiet } from '../common/audit.service';
+import { NguoiDung } from '../common/auth.decorators';
+import { ScopeService } from '../common/scope.service';
+import { layTen } from '../common/nghiep-vu';
+import { dongBoQuyPhepNamNay } from '../nghi-phep/dong-bo-quy';
+import { DanhSachQuery, NhanSuInput } from './nhan-su.schema';
+
+export const CHON_DANH_SACH = {
+  id: true,
+  maCanBo: true,
+  hoTen: true,
+  gioiTinh: true,
+  ngaySinh: true,
+  dienThoai: true,
+  email: true,
+  loaiNhanSu: true,
+  trangThai: true,
+  laGiangVien: true,
+  kiemNhiem: true,
+  trinhDoChuyenMon: true,
+  chuyenNganh: true,
+  chucDanhNgheNghiep: true,
+  donVi: { select: { id: true, ten: true, coSo: { select: { id: true, ten: true } } } },
+  chucVu: { select: { id: true, ten: true } },
+} satisfies Prisma.NhanSuSelect;
+
+@Injectable()
+export class NhanSuService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scope: ScopeService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async where(u: NguoiDung, q: Partial<DanhSachQuery>): Promise<Prisma.NhanSuWhereInput> {
+    const dk: Prisma.NhanSuWhereInput[] = [await this.scope.nhanSuWhere(u)];
+    if (q.q) {
+      const s = q.q;
+      dk.push({
+        OR: [
+          { hoTen: { contains: s, mode: 'insensitive' } },
+          { maCanBo: { startsWith: s.toUpperCase() } },
+          { email: { contains: s, mode: 'insensitive' } },
+          { dienThoai: { contains: s } },
+        ],
+      });
+    }
+    if (q.coSoId) dk.push({ donVi: { coSoId: q.coSoId } });
+    if (q.donViId) dk.push({ donViId: { in: await this.scope.donViVaCon(q.donViId) } });
+    if (q.chucVuId) dk.push({ chucVuId: q.chucVuId });
+    if (q.loaiNhanSu) dk.push({ loaiNhanSu: q.loaiNhanSu });
+    if (q.trangThai) dk.push({ trangThai: q.trangThai });
+    if (q.trinhDo) dk.push({ trinhDoChuyenMon: q.trinhDo });
+    if (q.gioiTinh) dk.push({ gioiTinh: q.gioiTinh });
+    if (q.laGiangVien !== undefined) dk.push({ laGiangVien: q.laGiangVien });
+    if (q.thieuCccd) dk.push({ maCanBo: { startsWith: 'TAM-' } });
+    return { AND: dk };
+  }
+
+  /** Sắp xếp theo tên rồi họ tên — thói quen lập danh sách ở Việt Nam. */
+  readonly thuTu: Prisma.NhanSuOrderByWithRelationInput[] = [{ ten: 'asc' }, { hoTen: 'asc' }];
+
+  async danhSach(u: NguoiDung, q: DanhSachQuery) {
+    const where = await this.where(u, q);
+    const [items, total] = await Promise.all([
+      this.prisma.nhanSu.findMany({
+        where,
+        select: CHON_DANH_SACH,
+        orderBy: this.thuTu,
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+      this.prisma.nhanSu.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  async chiTiet(u: NguoiDung, id: string) {
+    await this.scope.kiemTraXem(u, id);
+    const ns = await this.prisma.nhanSu.findUniqueOrThrow({
+      where: { id },
+      include: {
+        donVi: { select: { id: true, ten: true, coSo: { select: { id: true, ten: true } } } },
+        chucVu: { select: { id: true, ten: true } },
+        taiKhoan: { select: { id: true, vaiTro: true, hoatDong: true, dangNhapCuoi: true } },
+      },
+    });
+    return { ...ns, coQuyenSua: this.scope.coQuyenSua(u) };
+  }
+
+  private async kiemTraTrung(maCanBo: string, boQuaId?: string) {
+    const ton = await this.prisma.nhanSu.findUnique({ where: { maCanBo }, select: { id: true, hoTen: true } });
+    if (ton && ton.id !== boQuaId) {
+      throw new ConflictException(`Số CCCD ${maCanBo} đã được dùng cho cán bộ ${ton.hoTen}`);
+    }
+  }
+
+  async tao(u: NguoiDung, data: NhanSuInput, ip?: string) {
+    if (!this.scope.coQuyenSua(u)) throw new ForbiddenException('Bạn không có quyền thêm hồ sơ');
+    await this.scope.kiemTraDonVi(u, data.donViId);
+    await this.kiemTraTrung(data.maCanBo);
+    const ns = await this.prisma.nhanSu.create({ data: { ...data, ten: layTen(data.hoTen) } });
+    await this.audit.ghi(u, 'TAO', 'NhanSu', ns.id, `Thêm hồ sơ ${ns.hoTen} (${ns.maCanBo})`, undefined, ip);
+    return ns;
+  }
+
+  async sua(u: NguoiDung, id: string, data: NhanSuInput, ip?: string) {
+    await this.scope.kiemTraSua(u, id);
+    await this.scope.kiemTraDonVi(u, data.donViId);
+    await this.kiemTraTrung(data.maCanBo, id);
+    const cu = await this.prisma.nhanSu.findUniqueOrThrow({ where: { id } });
+    const ns = await this.prisma.$transaction(async (tx) => {
+      const moi = await tx.nhanSu.update({ where: { id }, data: { ...data, ten: layTen(data.hoTen) } });
+      // Tên đăng nhập luôn trùng mã cán bộ (CCCD)
+      if (cu.maCanBo !== moi.maCanBo) {
+        await tx.taiKhoan.updateMany({ where: { nhanSuId: id }, data: { tenDangNhap: moi.maCanBo } });
+      }
+      return moi;
+    });
+    if (cu.laGiangVien !== ns.laGiangVien || cu.kiemNhiem !== ns.kiemNhiem || cu.loaiNhanSu !== ns.loaiNhanSu || String(cu.ngayTuyenDung) !== String(ns.ngayTuyenDung)) {
+      await dongBoQuyPhepNamNay(this.prisma, id);
+    }
+    const thayDoi = khacBiet(cu, ns);
+    if (Object.keys(thayDoi).length) {
+      await this.audit.ghi(u, 'SUA', 'NhanSu', id, `Sửa hồ sơ ${ns.hoTen} (${ns.maCanBo})`, thayDoi, ip);
+    }
+    return ns;
+  }
+
+  async xoa(u: NguoiDung, id: string, ip?: string) {
+    await this.scope.kiemTraSua(u, id);
+    const ns = await this.prisma.nhanSu.delete({ where: { id } });
+    await this.audit.ghi(u, 'XOA', 'NhanSu', id, `Xóa hồ sơ ${ns.hoTen} (${ns.maCanBo})`, ns, ip);
+    return { ok: true };
+  }
+}

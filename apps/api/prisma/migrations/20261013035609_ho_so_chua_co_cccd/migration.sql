@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "NhanSu" ALTER COLUMN "gioiTinh" DROP NOT NULL,
+ALTER COLUMN "ngaySinh" DROP NOT NULL;

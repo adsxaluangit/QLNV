@@ -1,0 +1,80 @@
+name: qlns
+
+services:
+  db:
+    image: postgres:16
+    container_name: qlns_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qlns
+      POSTGRES_USER: qlns
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-qlns_dev_pass}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - qlns_db:/var/lib/postgresql/data
+    ports:
+      # Chỉ mở ra máy chủ (127.0.0.1) để dev/sao lưu; không mở ra mạng LAN
+      - "127.0.0.1:${DB_PORT:-5440}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qlns -d qlns"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    container_name: qlns_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://qlns:${DB_PASSWORD:-qlns_dev_pass}@db:5432/qlns
+      JWT_SECRET: ${JWT_SECRET:?Cần đặt JWT_SECRET trong file .env}
+      JWT_EXPIRES: ${JWT_EXPIRES:-8h}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      TZ: Asia/Ho_Chi_Minh
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: ./apps/web
+    container_name: qlns_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3100}:80"
+
+  # Sao lưu CSDL hằng ngày lúc 01:00, giữ 7 bản gần nhất (7 ngày) trong ./backups
+  backup:
+    image: postgres:16
+    container_name: qlns_backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-qlns_dev_pass}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      bash -c 'while true; do
+        now=$$(date +%H%M);
+        if [ "$$now" = "0100" ]; then
+          f=/backups/qlns_$$(date +%Y%m%d_%H%M).dump;
+          pg_dump -h db -U qlns -d qlns -Fc -f $$f && echo "Đã sao lưu $$f";
+          ls -1t /backups/qlns_*.dump | tail -n +8 | xargs -r rm --;
+          sleep 61;
+        fi;
+        sleep 30;
+      done'
+
+volumes:
+  qlns_db:

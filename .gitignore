@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+backups/
+*.log
+.DS_Store
+skills-main/
+*.xlsx
+!apps/**/*.xlsx
+code_backups/

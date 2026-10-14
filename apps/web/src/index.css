@@ -1,0 +1,432 @@
+:root {
+  --chinh: #0e7c86;
+  --chinh-dam: #0b4f5c;
+  --nhan: #f59e0b;
+  --chu-phu: #64748b;
+  --vien: #e5ecef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- Sidebar */
+.sider {
+  background: linear-gradient(175deg, #0a2f3c 0%, #0b4f5c 55%, #0e6b73 100%) !important;
+  box-shadow: 4px 0 24px rgba(10, 47, 60, 0.18);
+  position: sticky !important;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+}
+.sider .ant-menu {
+  padding: 0 10px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 72px;
+  padding: 0 20px;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.logo img {
+  width: 36px;
+  height: 36px;
+  flex: none;
+}
+.logo b {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+}
+.logo small {
+  display: block;
+  font-size: 11.5px;
+  opacity: 0.65;
+}
+
+/* ---------------------------------------------------------------- Header */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--vien);
+}
+.header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f2b35;
+}
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.user-chip:hover {
+  background: #eef5f6;
+}
+.user-chip .ten {
+  line-height: 1.2;
+  text-align: right;
+}
+.user-chip .ten small {
+  display: block;
+  color: var(--chu-phu);
+  font-size: 12px;
+}
+
+.content {
+  padding: 24px;
+  animation: hienLen 0.35s ease;
+}
+@keyframes hienLen {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Stat cards */
+.the-so {
+  position: relative;
+  overflow: hidden;
+  border: none !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.the-so:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(14, 124, 134, 0.16);
+}
+.the-so .icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: #fff;
+}
+.the-so .so {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-top: 14px;
+  color: #0f2b35;
+}
+.the-so .nhan {
+  color: var(--chu-phu);
+  font-size: 13px;
+}
+.the-so::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.06;
+}
+
+.card-mem {
+  border: 1px solid var(--vien) !important;
+  box-shadow: 0 2px 10px rgba(15, 43, 53, 0.04);
+}
+
+/* ---------------------------------------------------------------- Staff profile header */
+.ho-so-dau {
+  background: linear-gradient(120deg, #0b4f5c 0%, #0e7c86 60%, #14a3a0 100%);
+  color: #fff;
+  border-radius: 18px;
+  padding: 24px 28px;
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.ho-so-dau::before {
+  content: '';
+  position: absolute;
+  inset: auto -60px -120px auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 70%);
+}
+.ho-so-dau h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  color: #fff;
+}
+.ho-so-dau .meta {
+  opacity: 0.85;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 13.5px;
+}
+.ho-so-dau .ant-avatar {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  font-weight: 600;
+  flex: none;
+}
+.ho-so-dau .hanh-dong {
+  margin-left: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.ma-cccd {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: 0.5px;
+}
+
+.form-nhom-tieu-de {
+  font-weight: 600;
+  color: var(--chinh-dam);
+  margin: 8px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.form-nhom-tieu-de::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--vien);
+}
+
+/* ---------------------------------------------------------------- Login */
+.dang-nhap {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  background: #0a2f3c;
+}
+.dang-nhap .hero {
+  position: relative;
+  background: url('/hero.jpg') center / cover no-repeat;
+  display: flex;
+  align-items: flex-end;
+  padding: 56px;
+  color: #fff;
+}
+.dang-nhap .hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 47, 60, 0.15) 0%, rgba(10, 47, 60, 0.88) 100%);
+}
+.dang-nhap .hero > div {
+  position: relative;
+  max-width: 520px;
+}
+.dang-nhap .hero h2 {
+  font-size: 34px;
+  line-height: 1.25;
+  margin: 0 0 12px;
+  color: #fff;
+}
+.dang-nhap .hero p {
+  opacity: 0.8;
+  font-size: 15px;
+  margin: 0;
+}
+.dang-nhap .ben-phai {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: radial-gradient(circle at 20% 10%, #12707a 0%, #0b4f5c 40%, #0a2f3c 100%);
+}
+.the-dang-nhap {
+  width: 100%;
+  max-width: 400px;
+  padding: 36px 32px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+  animation: hienLen 0.5s ease;
+}
+.the-dang-nhap h1 {
+  font-size: 22px;
+  margin: 14px 0 4px;
+  color: #0f2b35;
+}
+.the-dang-nhap .phu {
+  color: var(--chu-phu);
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .dang-nhap {
+    grid-template-columns: 1fr;
+  }
+  .dang-nhap .hero {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Lương */
+.day-he-so {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.day-he-so span {
+  min-width: 42px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  color: #0f5f66;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+.day-he-so span:hover {
+  background: #0e7c86;
+  color: #fff;
+  transform: translateY(-1px);
+}
+.the-luong {
+  border-radius: 18px;
+  border: 1px solid #ccfbf1;
+  background: linear-gradient(120deg, #f0fdfa 0%, #ffffff 55%, #eef2ff 100%);
+  box-shadow: 0 10px 30px rgba(14, 124, 134, 0.08);
+}
+.the-luong .ant-statistic-content {
+  font-size: 30px;
+}
+
+/* ---------------------------------------------------------------- Form & Table Alignment Standardization */
+.ant-form-vertical .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.ant-form-vertical .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.ant-form-vertical .ant-form-item-label > label {
+  font-weight: 500;
+  font-size: 13.5px;
+  color: #1e293b;
+  height: 26px;
+  line-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* Ensure inputs, select, datepicker in vertical forms have uniform height and vertical baseline */
+.ant-form-vertical .ant-form-item-control-input {
+  min-height: 38px;
+}
+
+/* Modal styling */
+.ant-modal .ant-modal-content {
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 24px 28px;
+}
+
+.ant-modal .ant-modal-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ant-modal .ant-modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #0f2b35;
+}
+
+.ant-modal .ant-modal-footer {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Standardized Table Typography & Alignment */
+.ant-table {
+  font-size: 13.5px;
+}
+
+.ant-table-thead > tr > th {
+  background: #f8fafc !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+  font-size: 12.5px !important;
+  letter-spacing: 0.2px;
+  white-space: nowrap !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  padding: 11px 14px !important;
+}
+
+.ant-table-tbody > tr > td {
+  padding: 10px 14px !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background-color: #f0fdfa !important;
+}
+
+
+/* ===== Bảng chấm công ===== */
+.cc-wrap { overflow: auto; max-height: calc(100vh - 340px); border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.cc-table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; user-select: none; }
+.cc-table th, .cc-table td { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 0; text-align: center; background: #fff; }
+.cc-table thead th { position: sticky; top: 0; z-index: 3; background: #f1f5f9; font-weight: 600; padding: 4px 6px; }
+.cc-table .cc-th-ngay { min-width: 30px; width: 30px; padding: 2px 0; line-height: 1.25; }
+.cc-table .cc-th-ngay small { display: block; font-weight: 500; color: #64748b; }
+.cc-table .cc-th-ngay.cc-cuoituan, .cc-table .cc-th-ngay.cc-le { color: #b91c1c; }
+.cc-table .cc-th-ngay.cc-cuoituan small, .cc-table .cc-th-ngay.cc-le small { color: #b91c1c; }
+.cc-table .cc-sticky { position: sticky; z-index: 2; background: #fff; text-align: left; padding: 4px 8px; white-space: nowrap; }
+.cc-table thead .cc-sticky { z-index: 4; background: #f1f5f9; }
+.cc-table .cc-o { height: 30px; min-width: 30px; width: 30px; cursor: pointer; font-weight: 600; }
+.cc-table .cc-o:hover { outline: 2px solid #5eead4; outline-offset: -2px; }
+.cc-table .cc-o.cc-cuoituan { background: #f1f5f9; }
+.cc-table .cc-o.cc-le { background: #fef2f2; }
+.cc-table .cc-o.cc-chon { background: #ccfbf1 !important; outline: 2px solid #0f766e; outline-offset: -2px; }
+.cc-table .cc-o.cc-goiy { color: #94a3b8; font-weight: 500; font-style: italic; }
+.cc-table .cc-k-nghi { color: #1d4ed8; }
+.cc-table .cc-k-le { color: #b91c1c; }
+.cc-table .cc-k-bhxh { color: #7c3aed; }
+.cc-table .cc-k-no { color: #b45309; }
+.cc-table .cc-tong { min-width: 62px; padding: 4px 6px; font-weight: 600; }
+.cc-palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }

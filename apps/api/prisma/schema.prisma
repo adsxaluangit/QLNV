@@ -1,0 +1,502 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LoaiDonVi {
+  KHOA
+  PHONG
+  TRUNG_TAM
+  TO_BO_MON
+  KHAC
+}
+
+enum GioiTinh {
+  NAM
+  NU
+}
+
+enum LoaiNhanSu {
+  VIEN_CHUC
+  HOP_DONG
+  THINH_GIANG
+}
+
+enum TrangThaiNhanSu {
+  DANG_LAM_VIEC
+  TAM_NGHI
+  NGHI_HUU
+  THOI_VIEC
+  CHUYEN_CONG_TAC
+}
+
+enum TrinhDo {
+  TIEN_SI
+  THAC_SI
+  DAI_HOC
+  CAO_DANG
+  TRUNG_CAP
+  SO_CAP
+  KHAC
+}
+
+enum VaiTro {
+  QUAN_TRI
+  BAN_GIAM_HIEU
+  TCHC
+  KE_TOAN
+  DAO_TAO
+  TRUONG_DON_VI
+  CAN_BO
+}
+
+enum LoaiVanBang {
+  VAN_BANG
+  CHUNG_CHI
+}
+
+model CoSo {
+  id        String     @id @default(uuid())
+  ma        String     @unique
+  ten       String
+  diaChi    String?
+  thuTu     Int        @default(0)
+  donVis    DonVi[]
+  taiKhoans TaiKhoan[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model DonVi {
+  id        String     @id @default(uuid())
+  ma        String     @unique
+  ten       String
+  loai      LoaiDonVi  @default(KHAC)
+  thuTu     Int        @default(0)
+  coSoId    String
+  coSo      CoSo       @relation(fields: [coSoId], references: [id])
+  parentId  String?
+  parent    DonVi?     @relation("DonViCha", fields: [parentId], references: [id])
+  children  DonVi[]    @relation("DonViCha")
+  nhanSus   NhanSu[]
+  taiKhoans TaiKhoan[]
+  bangChamCongs BangChamCong[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([coSoId])
+  @@index([parentId])
+}
+
+model ChucVu {
+  id      String   @id @default(uuid())
+  ten     String   @unique
+  thuTu   Int      @default(0)
+  nhanSus NhanSu[]
+}
+
+/// Hồ sơ cán bộ. `id` là khóa nội bộ (không hiển thị); `maCanBo` = số CCCD
+/// (hoặc số hộ chiếu với người nước ngoài) — là mã nghiệp vụ duy nhất.
+/// Hoặc mã tạm `TAM-xxxx` với hồ sơ chưa có CCCD.
+model NhanSu {
+  id                 String            @id @default(uuid())
+  maCanBo            String            @unique
+  hoTen              String
+  /// Tên (từ cuối của họ tên) — dùng để sắp xếp theo thói quen Việt Nam.
+  ten                String
+  tenGoiKhac         String?
+  /// Trống với hồ sơ nhập từ bảng lương chưa có CCCD (mã tạm TAM-xxxx) — bắt buộc khi sửa hồ sơ
+  gioiTinh           GioiTinh?
+  ngaySinh           DateTime?         @db.Date
+  noiSinh            String?
+  queQuan            String?
+  quocTich           String            @default("Việt Nam")
+  danToc             String?
+  tonGiao            String?
+  ngayCapCccd        DateTime?         @db.Date
+  noiCapCccd         String?
+  dienThoai          String?
+  email              String?
+  diaChiThuongTru    String?
+  choOHienNay        String?
+  maSoThue           String?
+  soBhxh             String?
+  soTaiKhoan         String?
+  nganHang           String?
+  donViId            String
+  donVi              DonVi             @relation(fields: [donViId], references: [id])
+  chucVuId           String?
+  chucVu             ChucVu?           @relation(fields: [chucVuId], references: [id])
+  loaiNhanSu         LoaiNhanSu        @default(VIEN_CHUC)
+  trangThai          TrangThaiNhanSu   @default(DANG_LAM_VIEC)
+  laGiangVien        Boolean           @default(false)
+  /// Giảng viên kiêm nhiệm (làm hành chính): nghỉ phép tính như nhân viên
+  kiemNhiem          Boolean           @default(false)
+  chucDanhNgheNghiep String?
+  ngayTuyenDung      DateTime?         @db.Date
+  ngayVaoTruong      DateTime?         @db.Date
+  trinhDoChuyenMon   TrinhDo?
+  chuyenNganh        String?
+  hocHam             String?
+  danhHieu           String?
+  lyLuanChinhTri     String?
+  ngoaiNgu           String?
+  tinHoc             String?
+  nghiepVuSuPham     String?
+  kyNangNghe         String?
+  ngayVaoDang        DateTime?         @db.Date
+  ngayChinhThucDang  DateTime?         @db.Date
+  ghiChu             String?
+  quaTrinhCongTacs   QuaTrinhCongTac[]
+  vanBangs           VanBang[]
+  giaDinhs           QuanHeGiaDinh[]
+  quaTrinhLuongs     QuaTrinhLuong[]
+  phuCaps            PhuCap[]
+  hopDongs           HopDong[]
+  quyPheps           QuyPhep[]
+  donNghis           DonNghi[]
+  chamCongs          ChamCong[]
+  chamCongThangs     ChamCongThang[]
+  taiKhoan           TaiKhoan?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([donViId])
+  @@index([ten, hoTen])
+  @@index([trangThai])
+}
+
+// ================================================================ Lương
+
+enum LoaiPhuCap {
+  CHUC_VU
+  TRACH_NHIEM
+  UU_DAI_NGHE
+  THAM_NIEN_NHA_GIAO
+  KHAC
+}
+
+enum LoaiHopDong {
+  HDLV_KHONG_XAC_DINH
+  HDLV_XAC_DINH
+  HDLD_KHONG_XAC_DINH
+  HDLD_XAC_DINH
+  THINH_GIANG
+  KHAC
+}
+
+/// Ngạch / chức danh nghề nghiệp kèm bảng hệ số theo bậc (NĐ 204/2004).
+model NgachLuong {
+  id             String          @id @default(uuid())
+  ma             String          @unique
+  ten            String
+  /// Nhóm bảng lương, vd A1, A2.1, A0, B
+  nhom           String
+  /// heSo[0] = bậc 1
+  heSo           Float[]
+  /// Số tháng giữ bậc để nâng bậc thường xuyên (36 với A0 trở lên, 24 với B, C)
+  thangNangBac   Int             @default(36)
+  thuTu          Int             @default(0)
+  quaTrinhLuongs QuaTrinhLuong[]
+}
+
+/// Lịch sử mức lương cơ sở
+model LuongCoSo {
+  id       String   @id @default(uuid())
+  tuNgay   DateTime @unique @db.Date
+  mucLuong Int
+  canCu    String?
+}
+
+model QuaTrinhLuong {
+  id                String      @id @default(uuid())
+  nhanSuId          String
+  nhanSu            NhanSu      @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  /// Ngày hưởng
+  tuNgay            DateTime    @db.Date
+  ngachId           String?
+  ngach             NgachLuong? @relation(fields: [ngachId], references: [id])
+  bac               Int?
+  heSo              Float?
+  phanTramVuotKhung Int         @default(0)
+  /// Mốc tính thời gian nâng bậc / vượt khung lần sau
+  mocNangBac        DateTime    @db.Date
+  /// Lương hợp đồng thỏa thuận (không theo ngạch bậc), đồng/tháng
+  luongThoaThuan    Int?
+  soQuyetDinh       String?
+  ngayQuyetDinh     DateTime?   @db.Date
+  ghiChu            String?
+  createdAt         DateTime    @default(now())
+
+  @@index([nhanSuId, tuNgay])
+}
+
+model PhuCap {
+  id          String     @id @default(uuid())
+  nhanSuId    String
+  nhanSu      NhanSu     @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  loai        LoaiPhuCap
+  ten         String?
+  /// Dùng cho phụ cấp tính theo hệ số (chức vụ, trách nhiệm, khác)
+  heSo        Float?
+  /// Dùng cho phụ cấp tính theo % (ưu đãi nghề)
+  phanTram    Float?
+  /// Với thâm niên nhà giáo: mốc bắt đầu tính thâm niên
+  tuNgay      DateTime   @db.Date
+  denNgay     DateTime?  @db.Date
+  soQuyetDinh String?
+  ghiChu      String?
+  createdAt   DateTime   @default(now())
+
+  @@index([nhanSuId])
+}
+
+model HopDong {
+  id             String      @id @default(uuid())
+  nhanSuId       String
+  nhanSu         NhanSu      @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  soHopDong      String?
+  loai           LoaiHopDong
+  ngayKy         DateTime?   @db.Date
+  tuNgay         DateTime    @db.Date
+  denNgay        DateTime?   @db.Date
+  chucDanh       String?
+  luongThoaThuan Int?
+  ghiChu         String?
+  createdAt      DateTime    @default(now())
+
+  @@index([nhanSuId])
+  @@index([denNgay])
+}
+
+model QuaTrinhCongTac {
+  id          String    @id @default(uuid())
+  nhanSuId    String
+  nhanSu      NhanSu    @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  tuNgay      DateTime  @db.Date
+  denNgay     DateTime? @db.Date
+  noiCongTac  String
+  chucVu      String?
+  soQuyetDinh String?
+  ghiChu      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([nhanSuId])
+}
+
+model VanBang {
+  id          String      @id @default(uuid())
+  nhanSuId    String
+  nhanSu      NhanSu      @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  loai        LoaiVanBang
+  ten         String
+  chuyenNganh String?
+  noiCap      String?
+  soHieu      String?
+  ngayCap     DateTime?   @db.Date
+  ngayHetHan  DateTime?   @db.Date
+  xepLoai     String?
+  ghiChu      String?
+  createdAt   DateTime    @default(now())
+
+  @@index([nhanSuId])
+  @@index([ngayHetHan])
+}
+
+model QuanHeGiaDinh {
+  id         String   @id @default(uuid())
+  nhanSuId   String
+  nhanSu     NhanSu   @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  quanHe     String
+  hoTen      String
+  namSinh    Int?
+  ngheNghiep String?
+  noiO       String?
+  ghiChu     String?
+  createdAt  DateTime @default(now())
+
+  @@index([nhanSuId])
+}
+
+model TaiKhoan {
+  id             String    @id @default(uuid())
+  tenDangNhap    String    @unique
+  /// Tên hiển thị cho tài khoản không gắn với cán bộ (vd: admin)
+  tenHienThi     String?
+  matKhauHash    String
+  vaiTro         VaiTro    @default(CAN_BO)
+  hoatDong       Boolean   @default(true)
+  phaiDoiMatKhau Boolean   @default(true)
+  /// Tăng lên mỗi khi đổi/đặt lại mật khẩu để vô hiệu các phiên cũ
+  phienBan       Int       @default(0)
+  soLanSai       Int       @default(0)
+  khoaDen        DateTime?
+  dangNhapCuoi   DateTime?
+  nhanSuId       String?   @unique
+  nhanSu         NhanSu?   @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  /// Phạm vi theo cơ sở (TCHC/Kế toán/Đào tạo). Null = toàn trường.
+  phamViCoSoId   String?
+  phamViCoSo     CoSo?     @relation(fields: [phamViCoSoId], references: [id], onDelete: SetNull)
+  /// Phạm vi theo đơn vị (Trưởng đơn vị). Null = đơn vị của chính cán bộ.
+  phamViDonViId  String?
+  phamViDonVi    DonVi?    @relation(fields: [phamViDonViId], references: [id], onDelete: SetNull)
+  nhatKys        NhatKy[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model NhatKy {
+  id          String    @id @default(uuid())
+  taiKhoanId  String?
+  taiKhoan    TaiKhoan? @relation(fields: [taiKhoanId], references: [id], onDelete: SetNull)
+  tenDangNhap String?
+  hanhDong    String
+  doiTuong    String
+  doiTuongId  String?
+  moTa        String
+  duLieu      Json?
+  ip          String?
+  thoiGian    DateTime  @default(now())
+
+  @@index([thoiGian])
+  @@index([doiTuong, doiTuongId])
+}
+
+// ================================================================ Nghỉ phép
+
+enum LoaiNghi {
+  PHEP_NAM
+  OM_DAU
+  THAI_SAN
+  KHONG_LUONG
+  VIEC_RIENG
+  KHAC
+}
+
+enum TrangThaiDon {
+  CHO_TRUONG_DON_VI
+  CHO_BGH
+  CHO_TCHC
+  DA_DUYET
+  TU_CHOI
+  DA_HUY
+}
+
+/// Quỹ phép năm của từng cán bộ theo năm (không chuyển sang năm sau).
+model QuyPhep {
+  id             String   @id @default(uuid())
+  nhanSuId       String
+  nhanSu         NhanSu   @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  nam            Int
+  /// Số tháng làm việc được tính trong năm (tối đa 12)
+  soThang        Float    @default(12)
+  /// Ngày phép cơ bản theo điều kiện lao động (12)
+  phepCoBan      Float    @default(12)
+  /// Ngày phép tăng thêm theo thâm niên (cứ 5 năm +1)
+  phepThamNien   Float    @default(0)
+  /// Tổng phép năm theo tính toán (đã quy theo số tháng, làm tròn 0,5)
+  tongPhep       Float    @default(0)
+  /// TCHC điều chỉnh tay (+/-)
+  dieuChinh      Float    @default(0)
+  lyDoDieuChinh  String?
+  ghiChu         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([nhanSuId, nam])
+  @@index([nam])
+}
+
+/// Đơn xin nghỉ. Chỉ loại PHEP_NAM mới trừ vào quỹ phép năm.
+model DonNghi {
+  id            String         @id @default(uuid())
+  nhanSuId      String
+  nhanSu        NhanSu         @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  loai          LoaiNghi
+  tuNgay        DateTime       @db.Date
+  denNgay       DateTime       @db.Date
+  /// Nghỉ nửa ngày (chỉ khi tuNgay = denNgay)
+  nuaNgay       Boolean        @default(false)
+  /// Số ngày làm việc thực nghỉ (đã trừ T7, CN, ngày lễ)
+  soNgay        Float
+  lyDo          String
+  trangThai     TrangThaiDon
+  lyDoTuChoi    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  duyets        DuyetDonNghi[]
+
+  @@index([nhanSuId, tuNgay])
+  @@index([trangThai])
+}
+
+/// Lịch sử các bước duyệt của một đơn.
+model DuyetDonNghi {
+  id          String   @id @default(uuid())
+  donId       String
+  don         DonNghi  @relation(fields: [donId], references: [id], onDelete: Cascade)
+  taiKhoanId  String?
+  nguoiDuyet  String
+  buoc        String
+  ketQua      String
+  ghiChu      String?
+  thoiGian    DateTime @default(now())
+
+  @@index([donId])
+}
+
+/// Ngày nghỉ lễ / nghỉ bù (không tính vào số ngày nghỉ phép).
+model NgayNghiLe {
+  id   String   @id @default(uuid())
+  ngay DateTime @unique @db.Date
+  ten  String
+}
+
+
+// ================================================================ Chấm công
+/// Ký hiệu chấm công của một cán bộ trong một ngày (xem cham-cong/nghiep-vu-cong.ts).
+model ChamCong {
+  id        String   @id @default(uuid())
+  nhanSuId  String
+  nhanSu    NhanSu   @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  ngay      DateTime @db.Date
+  kyHieu    String
+  nguoiCham String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([nhanSuId, ngay])
+  @@index([ngay])
+}
+
+/// Trạng thái bảng chấm công tháng của một đơn vị (chốt sổ cuối tháng).
+model BangChamCong {
+  id       String    @id @default(uuid())
+  donViId  String
+  donVi    DonVi     @relation(fields: [donViId], references: [id], onDelete: Cascade)
+  nam      Int
+  thang    Int
+  daChot   Boolean   @default(false)
+  nguoiChot String?
+  ngayChot DateTime?
+
+  @@unique([donViId, nam, thang])
+}
+
+/// Số liệu bổ sung theo tháng cho từng cán bộ (lương khoán, công theo quyết định).
+model ChamCongThang {
+  id            String @id @default(uuid())
+  nhanSuId      String
+  nhanSu        NhanSu @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  nam           Int
+  thang         Int
+  luongKhoan    Float?
+  theoQuyetDinh Float?
+  ghiChu        String?
+
+  @@unique([nhanSuId, nam, thang])
+}
