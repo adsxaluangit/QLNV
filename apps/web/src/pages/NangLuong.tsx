@@ -141,7 +141,7 @@ export default function NangLuong() {
         </>
       ),
     },
-    { title: 'Mốc tính', dataIndex: 'mocNangBac', width: 110, render: (v) => fmtNgay(v) },
+    { title: 'Mốc tính', dataIndex: 'mocNangBac', width: 125, render: (v) => <span style={{ whiteSpace: 'nowrap' }}>{fmtNgay(v)}</span> },
     {
       title: 'Đề xuất',
       key: 'deXuat',

@@ -95,12 +95,12 @@ function TabQuy({ sua }: { sua: boolean }) {
         </>}
       />
       <Table<DongQuy>
-        rowKey="quyId" size="small" loading={ds.isFetching} dataSource={ds.data} scroll={{ x: 1200 }}
+        rowKey="quyId" size="small" loading={ds.isFetching} dataSource={ds.data} scroll={{ x: 1300 }}
         pagination={{ pageSize: 30, showSizeChanger: false, showTotal: (t) => `${t} cán bộ` }}
         columns={[
-          { title: 'Họ và tên', width: 200, fixed: 'left', render: (_, r) => (<><b>{r.hoTen}</b>{r.laGiangVien && <Tag style={{ marginLeft: 6 }}>GV</Tag>}{r.kiemNhiem && <Tag color="cyan" style={{ marginLeft: 6 }}>GVKN</Tag>}</>) },
+          { title: 'Họ và tên', width: 250, fixed: 'left', render: (_, r) => (<span style={{ whiteSpace: 'nowrap' }}><b>{r.hoTen}</b>{r.laGiangVien && <Tag style={{ marginLeft: 6 }}>GV</Tag>}{r.kiemNhiem && <Tag color="cyan" style={{ marginLeft: 6 }}>GVKN</Tag>}</span>) },
           { title: 'Đơn vị', dataIndex: 'donVi', width: 200, ellipsis: true },
-          { title: 'Tuyển dụng', dataIndex: 'ngayTuyenDung', width: 110, render: fmtNgay },
+          { title: 'Tuyển dụng', dataIndex: 'ngayTuyenDung', width: 125, render: (v: string | null) => <span style={{ whiteSpace: 'nowrap' }}>{fmtNgay(v)}</span> },
           { title: 'Cơ bản', dataIndex: 'phepCoBan', width: 70, align: 'center' },
           { title: 'Thâm niên', dataIndex: 'phepThamNien', width: 85, align: 'center' },
           { title: 'Điều chỉnh', dataIndex: 'dieuChinh', width: 90, align: 'center', render: (v: number, r) => (v ? <span title={r.lyDoDieuChinh ?? ''}>{v > 0 ? `+${v}` : v}</span> : '') },
