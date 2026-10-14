@@ -50,10 +50,22 @@ try {
     Write-Host $successMsg -ForegroundColor Green
     Add-Content -Path $logFile -Value $successMsg
 
+    # 4b. Sao luu ma nguon + file Excel goc + .env (bo node_modules, dist, backups, .git)
+    $codeName = "qlns_code_$timeStamp.zip"
+    $codeFile = Join-Path $backupDir $codeName
+    $stage = Join-Path $env:TEMP "qlns_code_stage_$timeStamp"
+    robocopy $projectDir $stage /E /XD node_modules dist backups .git skills-main /XF *.log /NFL /NDL /NJH /NJS /NP | Out-Null
+    Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $codeFile -Force
+    Remove-Item $stage -Recurse -Force
+    $codeSizeKB = [math]::Round((Get-Item $codeFile).Length / 1024, 2)
+    $codeMsg = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] SAO LUU MA NGUON: $codeName ($codeSizeKB KB)"
+    Write-Host $codeMsg -ForegroundColor Green
+    Add-Content -Path $logFile -Value $codeMsg
+
     # 5. Xoa ban sao luu cu hon 7 ngay (chi giu 7 ngay gan nhat theo yeu cau)
     $limitDate = (Get-Date).AddDays(-7)
     Get-ChildItem -Path $backupDir -Filter "qlns_*" | Where-Object { 
-        ($_.Extension -eq ".dump" -or $_.Extension -eq ".sql") -and ($_.LastWriteTime -lt $limitDate) 
+        ($_.Extension -eq ".dump" -or $_.Extension -eq ".sql" -or $_.Extension -eq ".zip") -and ($_.LastWriteTime -lt $limitDate) 
     } | ForEach-Object {
         Remove-Item $_.FullName -Force
         Add-Content -Path $logFile -Value "Da xoa ban cu (qua 7 ngay): $($_.Name)"
