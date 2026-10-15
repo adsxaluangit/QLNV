@@ -48,8 +48,9 @@ const BUOC: Record<string, string> = {
   CHO_BGH: 'Ban giám hiệu',
   CHO_TCHC: 'Phòng TCHC xác nhận',
   HUY: 'Hủy đơn',
+  DI_LAM_LAI: 'Đi làm lại',
 };
-const KET_QUA: Record<string, string> = { GUI: 'đã gửi', DUYET: 'đã duyệt', TU_CHOI: 'từ chối', HUY: 'đã hủy' };
+const KET_QUA: Record<string, string> = { GUI: 'đã gửi', DUYET: 'đã duyệt', TU_CHOI: 'từ chối', HUY: 'đã hủy', DI_LAM_LAI: 'đi làm lại' };
 
 export function LichSuDuyet({ d }: { d: Don }) {
   return (

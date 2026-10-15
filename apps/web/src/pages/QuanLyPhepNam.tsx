@@ -128,17 +128,46 @@ function TabQuy({ sua }: { sua: boolean }) {
 }
 
 function TabDon() {
+  const { message } = AntApp.useApp();
+  const qc = useQueryClient();
+  const { nguoiDung } = useAuth();
+  const sua = coQuyenSua(nguoiDung?.vaiTro);
   const [nam, setNam] = useState(dayjs().year());
   const [donViId, setDonViId] = useState<string>();
   const [q, setQ] = useState('');
   const [trangThai, setTrangThai] = useState<string>();
+  const [donDiLam, setDonDiLam] = useState<Don>();
+  const [formDiLam] = Form.useForm<{ ngayDiLam: dayjs.Dayjs }>();
   const ds = useQuery({ queryKey: ['tat-ca-don', nam, donViId, q, trangThai], queryFn: () => api<Don[]>('/nghi-phep/don', { query: { nam, donViId, q, trangThai } }) });
+
+  const diLamLai = useMutation({
+    mutationFn: (v: { id: string; ngayDiLam: string }) => api(`/nghi-phep/don/${v.id}/di-lam-lai`, { method: 'POST', body: { ngayDiLam: v.ngayDiLam } }),
+    onSuccess: () => {
+      message.success('Đã xử lý đi làm lại thành công');
+      setDonDiLam(undefined);
+      formDiLam.resetFields();
+      qc.invalidateQueries({ queryKey: ['tat-ca-don'] });
+    },
+    onError: (e: ApiError) => message.error(e.message),
+  });
+
+  const huy = useMutation({
+    mutationFn: (id: string) => api(`/nghi-phep/don/${id}/huy`, { method: 'PATCH' }),
+    onSuccess: () => { message.success('Đã hủy đơn'); qc.invalidateQueries({ queryKey: ['tat-ca-don'] }); },
+    onError: (e: ApiError) => message.error(e.message),
+  });
+
+  /** Đơn nghỉ không lương dài hạn đã duyệt → cho phép "Đi làm lại". */
+  const coTheDiLam = (r: Don) => sua && r.trangThai === 'DA_DUYET' && r.loai === 'KHONG_LUONG' && r.soNgay > 30;
+  /** TCHC có thể hủy đơn đang chờ duyệt hoặc đã duyệt. */
+  const coTheHuy = (r: Don) => sua && ['CHO_TRUONG_DON_VI', 'CHO_BGH', 'CHO_TCHC', 'DA_DUYET'].includes(r.trangThai);
+
   return (
     <>
       <Loc nam={nam} setNam={setNam} donViId={donViId} setDonViId={setDonViId} q={q} setQ={setQ}
         extra={<Select allowClear placeholder="Trạng thái" style={{ width: 200 }} options={TRANG_THAI} value={trangThai} onChange={setTrangThai} />} />
       <Table<Don>
-        rowKey="id" size="small" loading={ds.isFetching} dataSource={ds.data} scroll={{ x: 900 }}
+        rowKey="id" size="small" loading={ds.isFetching} dataSource={ds.data} scroll={{ x: 1100 }}
         expandable={{ expandedRowRender: (r) => <LichSuDuyet d={r} /> }}
         pagination={{ pageSize: 30, showSizeChanger: false, showTotal: (t) => `${t} đơn` }}
         columns={[
@@ -148,8 +177,44 @@ function TabDon() {
           { title: 'Số ngày', dataIndex: 'soNgay', width: 80, align: 'center' },
           { title: 'Lý do', dataIndex: 'lyDo', ellipsis: true },
           { title: 'Trạng thái', width: 170, render: (_, r) => <Tag color={MAU_TT[r.trangThai]}>{r.tenTrangThai}</Tag> },
+          ...(sua ? [{
+            title: '',
+            width: 180,
+            render: (_: unknown, r: Don) => (
+              <Space size={4}>
+                {coTheDiLam(r) && <Button size="small" type="primary" ghost icon={<ReloadOutlined />} onClick={() => setDonDiLam(r)}>Đi làm lại</Button>}
+                {coTheHuy(r) && (
+                  <Popconfirm title="Hủy đơn nghỉ này?" description={r.trangThai === 'DA_DUYET' ? 'Đơn đã duyệt sẽ bị hủy bỏ.' : undefined} okText="Hủy đơn" cancelText="Không" onConfirm={() => huy.mutate(r.id)}>
+                    <Button size="small" danger>Hủy</Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            ),
+          }] : []),
         ]}
       />
+      <Modal
+        title={`Đi làm lại — ${donDiLam?.hoTen ?? ''}`}
+        open={!!donDiLam}
+        okText="Xác nhận đi làm lại"
+        cancelText="Đóng"
+        confirmLoading={diLamLai.isPending}
+        onCancel={() => setDonDiLam(undefined)}
+        onOk={() => formDiLam.validateFields().then((v) => donDiLam && diLamLai.mutate({ id: donDiLam.id, ngayDiLam: toIso(v.ngayDiLam)! }))}
+        destroyOnClose
+      >
+        {donDiLam && (
+          <div style={{ marginBottom: 16, color: '#64748b' }}>
+            Đơn nghỉ không lương: <b>{fmtNgay(donDiLam.tuNgay)} → {fmtNgay(donDiLam.denNgay)}</b> ({donDiLam.soNgay} ngày).
+            <br />Chọn ngày thực tế đi làm lại. Nếu sớm hơn dự kiến, hệ thống sẽ tự rút ngắn đơn nghỉ và chuyển trạng thái nhân sự về <b>Đang làm việc</b>.
+          </div>
+        )}
+        <Form form={formDiLam} layout="vertical">
+          <Form.Item name="ngayDiLam" label="Ngày đi làm lại" rules={[{ required: true, message: 'Chọn ngày đi làm lại' }]}>
+            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </>
   );
 }

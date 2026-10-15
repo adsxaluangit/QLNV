@@ -85,6 +85,9 @@ const dieuChinhSchema = z.object({
 const tinhLaiSchema = z.object({ nam: z.coerce.number().int().min(2000).max(2100) });
 const leSchema = z.object({ tuNgay: ngay, denNgay: ngayOpt, ten: z.string().trim().min(2, 'Nhập tên ngày nghỉ').max(100) });
 const kiemNhiemSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(500), kiemNhiem: z.boolean() });
+const diLamLaiSchema = z.object({ ngayDiLam: ngay });
+/** Ngưỡng ngày nghỉ không lương để coi là dài hạn (tự động TAM_NGHI). */
+const NGHI_DAI_HAN = 30;
 const gvQuery = z.object({
   donViId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
   q: z.string().trim().optional(),
@@ -528,7 +531,7 @@ export class NghiPhepController {
   @Get('don/uoc-tinh')
   async uocTinh(@Query(new ZodPipe(uocTinhQuery)) q: z.infer<typeof uocTinhQuery>) {
     if (q.denNgay < q.tuNgay) throw new BadRequestException('Đến ngày phải sau hoặc bằng từ ngày');
-    if ((q.denNgay.getTime() - q.tuNgay.getTime()) / 86_400_000 > 366) throw new BadRequestException('Khoảng nghỉ quá dài');
+    if ((q.denNgay.getTime() - q.tuNgay.getTime()) / 86_400_000 > 731) throw new BadRequestException('Khoảng nghỉ quá dài (tối đa 2 năm)');
     const le = await this.tapLe(q.tuNgay, q.denNgay);
     return { soNgay: demNgayLamViec(q.tuNgay, q.denNgay, le, q.nuaNgay && iso(q.tuNgay) === iso(q.denNgay)) };
   }
@@ -550,7 +553,15 @@ export class NghiPhepController {
     const ns = await this.nhanSuCuaToi(u);
     if (body.denNgay < body.tuNgay) throw new BadRequestException('Đến ngày phải sau hoặc bằng từ ngày');
     if (body.nuaNgay && iso(body.tuNgay) !== iso(body.denNgay)) throw new BadRequestException('Chỉ chọn nửa ngày khi nghỉ trong một ngày');
-    if ((body.denNgay.getTime() - body.tuNgay.getTime()) / 86_400_000 > 366) throw new BadRequestException('Khoảng nghỉ quá dài');
+    const nghiDaiHan = ns.laGiangVien && body.loai === 'KHONG_LUONG'; // GV / GV kiêm nhiệm nghỉ không lương được tối đa 2 năm
+    const gioiHanNgay = nghiDaiHan ? 731 : 366;
+    if ((body.denNgay.getTime() - body.tuNgay.getTime()) / 86_400_000 > gioiHanNgay) {
+      throw new BadRequestException(
+        nghiDaiHan
+          ? 'Khoảng nghỉ quá dài (tối đa 2 năm đối với giảng viên nghỉ không lương)'
+          : 'Khoảng nghỉ quá dài (tối đa 1 năm)',
+      );
+    }
     const sau7NgayTruoc = new Date(homNay().getTime() - 7 * 86_400_000);
     if (body.tuNgay < sau7NgayTruoc) throw new BadRequestException('Không thể xin nghỉ cho ngày đã qua quá 7 ngày. Hãy liên hệ Phòng TCHC');
 
@@ -703,6 +714,16 @@ export class NghiPhepController {
       `${moi === 'DA_DUYET' ? 'Xác nhận' : 'Duyệt'} đơn nghỉ của ${don.nhanSu.hoTen} (${iso(don.tuNgay)} → ${iso(don.denNgay)}, ${don.soNgay} ngày)`,
       undefined, ip,
     );
+    // Tự động chuyển trạng thái nhân sự sang TAM_NGHI khi duyệt nghỉ không lương dài hạn
+    if (moi === 'DA_DUYET' && don.loai === 'KHONG_LUONG' && don.soNgay > NGHI_DAI_HAN) {
+      await this.prisma.nhanSu.update({ where: { id: don.nhanSuId }, data: { trangThai: 'TAM_NGHI' } });
+      await this.audit.ghi(
+        u, 'SUA', 'NhanSu', don.nhanSuId,
+        `Tự động chuyển ${don.nhanSu.hoTen} sang Tạm nghỉ (nghỉ không lương ${don.soNgay} ngày, ${iso(don.tuNgay)} → ${iso(don.denNgay)})`,
+        undefined, ip,
+      );
+    }
+
     return { trangThai: moi, tenTrangThai: NHAN_TRANG_THAI_DON[moi] };
   }
 
@@ -725,6 +746,71 @@ export class NghiPhepController {
     });
     await this.audit.ghi(u, 'SUA', 'DonNghi', id, `Từ chối đơn nghỉ của ${don.nhanSu.hoTen}: ${body.lyDo}`, undefined, ip);
     return { ok: true };
+  }
+
+  // ------------------------------------------------------------ Đi làm lại (kết thúc nghỉ KL dài hạn sớm)
+  @Roles(...QUYEN_SUA)
+  @Post('don/:id/di-lam-lai')
+  async diLamLai(
+    @CurrentUser() u: NguoiDung,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(diLamLaiSchema)) body: z.infer<typeof diLamLaiSchema>,
+    @Ip() ip: string,
+  ) {
+    const don = await this.prisma.donNghi.findUnique({ where: { id }, include: this.bao });
+    if (!don) throw new NotFoundException('Không tìm thấy đơn nghỉ');
+    if (don.trangThai !== 'DA_DUYET') throw new BadRequestException('Chỉ xử lý được đơn đã duyệt');
+    if (don.loai !== 'KHONG_LUONG') throw new BadRequestException('Chỉ áp dụng cho đơn nghỉ không lương');
+    if (don.soNgay <= NGHI_DAI_HAN) throw new BadRequestException('Chỉ áp dụng cho đơn nghỉ dài hạn (trên 30 ngày)');
+    await this.scope.kiemTraSua(u, don.nhanSuId);
+
+    const ngayDiLam = body.ngayDiLam;
+    if (ngayDiLam <= don.tuNgay) throw new BadRequestException('Ngày đi làm lại phải sau ngày bắt đầu nghỉ');
+
+    // Trả sớm: rút ngắn denNgay; trả đúng/muộn: giữ nguyên denNgay
+    const denNgayMoi = ngayDiLam <= don.denNgay
+      ? new Date(ngayDiLam.getTime() - 86_400_000)
+      : don.denNgay;
+
+    // Tính lại số ngày nghỉ thực tế
+    const le = await this.tapLe(don.tuNgay, denNgayMoi);
+    const soNgayMoi = demNgayLamViec(don.tuNgay, denNgayMoi, le, false);
+
+    await this.prisma.$transaction([
+      this.prisma.donNghi.update({
+        where: { id },
+        data: {
+          denNgay: denNgayMoi,
+          soNgay: soNgayMoi,
+          duyets: {
+            create: {
+              taiKhoanId: u.id,
+              nguoiDuyet: u.tenDangNhap,
+              buoc: 'DI_LAM_LAI',
+              ketQua: 'DI_LAM_LAI',
+              ghiChu: `Đi làm lại từ ${iso(ngayDiLam)}${ngayDiLam <= don.denNgay ? ` (sớm ${don.soNgay - soNgayMoi} ngày)` : ''}`,
+            },
+          },
+        },
+      }),
+      this.prisma.nhanSu.update({
+        where: { id: don.nhanSuId },
+        data: { trangThai: 'DANG_LAM_VIEC' },
+      }),
+    ]);
+
+    await this.audit.ghi(
+      u, 'SUA', 'DonNghi', id,
+      `${don.nhanSu.hoTen} đi làm lại từ ${iso(ngayDiLam)} (nghỉ thực tế ${soNgayMoi}/${don.soNgay} ngày)`,
+      { denNgay: [iso(don.denNgay), iso(denNgayMoi)], soNgay: [don.soNgay, soNgayMoi] }, ip,
+    );
+    await this.audit.ghi(
+      u, 'SUA', 'NhanSu', don.nhanSuId,
+      `Chuyển ${don.nhanSu.hoTen} từ Tạm nghỉ về Đang làm việc (đi làm lại từ ${iso(ngayDiLam)})`,
+      undefined, ip,
+    );
+
+    return { ok: true, soNgayThucTe: soNgayMoi, ngayDiLam: iso(ngayDiLam) };
   }
 
   /** Mọi đơn trong phạm vi của người xem (TCHC, BGH, Trưởng đơn vị). */
