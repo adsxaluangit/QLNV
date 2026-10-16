@@ -65,16 +65,20 @@ export class NhanSuService {
 
   async danhSach(u: NguoiDung, q: DanhSachQuery) {
     const where = await this.where(u, q);
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       this.prisma.nhanSu.findMany({
         where,
-        select: CHON_DANH_SACH,
+        select: { ...CHON_DANH_SACH, anhDaiDien: true },
         orderBy: this.thuTu,
         skip: (q.page - 1) * q.pageSize,
         take: q.pageSize,
       }),
       this.prisma.nhanSu.count({ where }),
     ]);
+    const items = rawItems.map(({ anhDaiDien, ...rest }) => ({
+      ...rest,
+      coAnh: Boolean(anhDaiDien),
+    }));
     return { items, total };
   }
 
@@ -127,6 +131,28 @@ export class NhanSuService {
     if (Object.keys(thayDoi).length) {
       await this.audit.ghi(u, 'SUA', 'NhanSu', id, `Sửa hồ sơ ${ns.hoTen} (${ns.maCanBo})`, thayDoi, ip);
     }
+    return ns;
+  }
+
+  async layAnh(id: string) {
+    return this.prisma.nhanSu.findUnique({
+      where: { id },
+      select: { anhDaiDien: true },
+    });
+  }
+
+  async capNhatAnh(u: NguoiDung, id: string, anhDataUrl: string | null, ip?: string) {
+    if (!this.scope.coQuyenSua(u) && u.nhanSuId !== id) {
+      throw new ForbiddenException('Bạn không có quyền cập nhật ảnh của cán bộ này');
+    }
+    const cu = await this.prisma.nhanSu.findUniqueOrThrow({ where: { id }, select: { id: true, hoTen: true, maCanBo: true } });
+    const ns = await this.prisma.nhanSu.update({
+      where: { id },
+      data: { anhDaiDien: anhDataUrl },
+      select: { id: true, hoTen: true, maCanBo: true, anhDaiDien: true },
+    });
+    const hanhDong = anhDataUrl ? 'Cập nhật ảnh 3x4' : 'Xóa ảnh 3x4';
+    await this.audit.ghi(u, 'SUA', 'NhanSu', id, `${hanhDong} cho cán bộ ${cu.hoTen} (${cu.maCanBo})`, undefined, ip);
     return ns;
   }
 

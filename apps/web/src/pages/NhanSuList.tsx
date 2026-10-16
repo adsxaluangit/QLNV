@@ -34,6 +34,7 @@ export interface NhanSuDong {
   chucDanhNgheNghiep: string | null;
   donVi: { id: string; ten: string; coSo: { id: string; ten: string } };
   chucVu: { id: string; ten: string } | null;
+  coAnh?: boolean;
 }
 
 const BO_LOC = ['q', 'coSoId', 'donViId', 'loaiNhanSu', 'trangThai', 'trinhDo', 'gioiTinh', 'thieuCccd'] as const;
@@ -176,7 +177,12 @@ export default function NhanSuList() {
             fixed: 'left',
             render: (_, r) => (
               <Space>
-                <Avatar style={{ background: r.gioiTinh === 'NU' ? '#ec4899' : '#0e7c86' }}>{chuCaiDau(r.hoTen)}</Avatar>
+                <Avatar
+                  src={r.coAnh ? `/api/nhan-su/${r.id}/anh` : undefined}
+                  style={{ background: r.gioiTinh === 'NU' ? '#ec4899' : '#0e7c86' }}
+                >
+                  {chuCaiDau(r.hoTen)}
+                </Avatar>
                 <div>
                   <Link to={`/nhan-su/${r.id}`} style={{ fontWeight: 600 }}>
                     {r.hoTen}

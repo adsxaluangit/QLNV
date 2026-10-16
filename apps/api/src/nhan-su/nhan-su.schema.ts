@@ -70,6 +70,7 @@ export const nhanSuSchema = z
     ngayVaoDang: ngayOpt,
     ngayChinhThucDang: ngayOpt,
     ghiChu: txt(2000),
+    anhDaiDien: z.string().nullish().transform((v) => v ?? null),
   })
   .superRefine((d, ctx) => {
     const loi = kiemTraMaCanBo(d.maCanBo, d.quocTich);

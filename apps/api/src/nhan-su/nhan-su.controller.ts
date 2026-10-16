@@ -20,7 +20,7 @@ import type { Response } from 'express';
 import { ZodTypeAny } from 'zod';
 import { PrismaService } from '../prisma.service';
 import { AuditService, khacBiet } from '../common/audit.service';
-import { CurrentUser, NguoiDung, QUYEN_SUA, QUYEN_XEM_DS, Roles } from '../common/auth.decorators';
+import { CurrentUser, NguoiDung, Public, QUYEN_SUA, QUYEN_XEM_DS, Roles } from '../common/auth.decorators';
 import { ScopeService } from '../common/scope.service';
 import { ZodPipe } from '../common/zod';
 import { ExcelService } from './excel.service';
@@ -88,6 +88,57 @@ export class NhanSuController {
   @Get(':id')
   chiTiet(@CurrentUser() u: NguoiDung, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.chiTiet(u, id);
+  }
+
+  @Public()
+  @Get(':id/anh')
+  async layAnh(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    const ns = await this.svc.layAnh(id);
+    if (!ns || !ns.anhDaiDien) {
+      return res.status(404).send('Không có ảnh');
+    }
+    const match = ns.anhDaiDien.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+    if (!match) {
+      return res.redirect(ns.anhDaiDien);
+    }
+    const contentType = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.end(buffer);
+  }
+
+  @Post(':id/anh')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async taiAnh(
+    @CurrentUser() u: NguoiDung,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('anh') anhBody: string | undefined,
+    @Ip() ip: string,
+  ) {
+    let dataUrl: string;
+    if (file) {
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException('Chỉ chấp nhận file ảnh (JPG, PNG, WEBP)');
+      }
+      dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    } else if (anhBody && anhBody.startsWith('data:image/')) {
+      dataUrl = anhBody;
+    } else {
+      throw new BadRequestException('Chưa chọn ảnh hoặc định dạng không đúng');
+    }
+    return this.svc.capNhatAnh(u, id, dataUrl, ip);
+  }
+
+  @Delete(':id/anh')
+  xoaAnh(@CurrentUser() u: NguoiDung, @Param('id', ParseUUIDPipe) id: string, @Ip() ip: string) {
+    return this.svc.capNhatAnh(u, id, null, ip);
   }
 
   @Roles(...QUYEN_SUA)

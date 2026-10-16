@@ -20,7 +20,14 @@ import { CurrentUser, NguoiDung, QUYEN_SUA, QUYEN_XEM_DS, Roles } from '../commo
 import { ScopeService } from '../common/scope.service';
 import { ngay, ngayOpt, txt, ZodPipe } from '../common/zod';
 import { xuLyTrung } from '../to-chuc/to-chuc.controller';
-import { congThang, deXuatNangLuong, iso, NHAN_LOAI_HOP_DONG, uocTinhLuong } from './nghiep-vu-luong';
+import {
+  congThang,
+  deXuatNangLuong,
+  iso,
+  NHAN_LOAI_HOP_DONG,
+  tinhTongThangKeoDai,
+  uocTinhLuong,
+} from './nghiep-vu-luong';
 
 const DANG_LAM = { in: ['DANG_LAM_VIEC', 'TAM_NGHI'] as ('DANG_LAM_VIEC' | 'TAM_NGHI')[] };
 
@@ -158,6 +165,9 @@ export interface DongDenHan {
   heSoHienTai: number;
   vuotKhungHienTai: number;
   mocNangBac: string;
+  mocNangBacDieuChinh?: string;
+  soThangKeoDai?: number;
+  lyDoKeoDai?: string;
   loai: 'NANG_BAC' | 'VUOT_KHUNG';
   ngayDenHan: string;
   bacMoi: number;
@@ -193,6 +203,10 @@ export class NangLuongController {
         ten: true,
         donVi: { select: { ten: true } },
         quaTrinhLuongs: { orderBy: [{ tuNgay: 'desc' }, { createdAt: 'desc' }], take: 1, include: { ngach: true } },
+        donNghis: {
+          where: { loai: 'KHONG_LUONG', trangThai: 'DA_DUYET' },
+          select: { tuNgay: true, denNgay: true, loai: true, trangThai: true },
+        },
       },
       orderBy: [{ ten: 'asc' }, { hoTen: 'asc' }],
     });
@@ -201,7 +215,8 @@ export class NangLuongController {
     for (const ns of ds) {
       const qtl = ns.quaTrinhLuongs[0];
       if (!qtl?.ngach || !qtl.bac || qtl.luongThoaThuan) continue;
-      const dx = deXuatNangLuong(qtl, qtl.ngach);
+      const { soThang, lyDo } = tinhTongThangKeoDai(qtl.mocNangBac, ns.donNghis ?? []);
+      const dx = deXuatNangLuong(qtl, qtl.ngach, soThang);
       if (!dx || dx.ngayDenHan > denNgay) continue;
       kq.push({
         nhanSuId: ns.id,
@@ -213,6 +228,9 @@ export class NangLuongController {
         heSoHienTai: qtl.heSo ?? 0,
         vuotKhungHienTai: qtl.phanTramVuotKhung,
         mocNangBac: iso(qtl.mocNangBac),
+        mocNangBacDieuChinh: iso(dx.mocNangBacDieuChinh ?? qtl.mocNangBac),
+        soThangKeoDai: soThang,
+        lyDoKeoDai: lyDo,
         loai: dx.loai,
         ngayDenHan: iso(dx.ngayDenHan),
         bacMoi: dx.bacMoi,
@@ -262,7 +280,10 @@ export class NangLuongController {
     const rong = [6, 16, 26, 24, 12, 9, 10, 9, 12, 14, 13, 14, 9];
     rong.forEach((w, i) => (ws.getColumn(i + 1).width = w));
     const dmy = (s: string) => s.split('-').reverse().join('/');
-    ds.forEach((d, i) =>
+    ds.forEach((d, i) => {
+      const mocHienThi = d.soThangKeoDai && d.soThangKeoDai > 0
+        ? `${dmy(d.mocNangBacDieuChinh ?? d.mocNangBac)} (+${d.soThangKeoDai} thg)`
+        : dmy(d.mocNangBac);
       ws.addRow([
         i + 1,
         d.maCanBo,
@@ -272,13 +293,13 @@ export class NangLuongController {
         d.bacHienTai,
         d.heSoHienTai,
         d.vuotKhungHienTai || '',
-        dmy(d.mocNangBac),
+        mocHienThi,
         d.loai === 'NANG_BAC' ? 'Nâng bậc' : 'Vượt khung',
         dmy(d.ngayDenHan),
         `Bậc ${d.bacMoi} / ${d.heSoMoi.toFixed(2)}`,
         d.vuotKhungMoi || '',
-      ]),
-    );
+      ]);
+    });
     ws.eachRow((row, n) => {
       if (n < 3) return;
       row.eachCell({ includeEmpty: true }, (c) => {
@@ -364,7 +385,7 @@ export class NangLuongController {
   async uocTinh(@CurrentUser() u: NguoiDung, @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string) {
     await this.scope.kiemTraXem(u, nhanSuId);
     const homNay = new Date();
-    const [qtl, phuCaps, lcs] = await Promise.all([
+    const [qtl, phuCaps, lcs, donNghis] = await Promise.all([
       this.prisma.quaTrinhLuong.findFirst({
         where: { nhanSuId, tuNgay: { lte: homNay } },
         orderBy: [{ tuNgay: 'desc' }, { createdAt: 'desc' }],
@@ -372,13 +393,27 @@ export class NangLuongController {
       }),
       this.prisma.phuCap.findMany({ where: { nhanSuId } }),
       this.prisma.luongCoSo.findFirst({ where: { tuNgay: { lte: homNay } }, orderBy: { tuNgay: 'desc' } }),
+      this.prisma.donNghi.findMany({
+        where: { nhanSuId, loai: 'KHONG_LUONG', trangThai: 'DA_DUYET' },
+        select: { tuNgay: true, denNgay: true, loai: true, trangThai: true },
+      }),
     ]);
     const kq = uocTinhLuong(qtl, phuCaps, lcs?.mucLuong ?? 0, homNay);
-    const dx = qtl ? deXuatNangLuong(qtl, qtl.ngach) : null;
+    const { soThang, lyDo } = qtl ? tinhTongThangKeoDai(qtl.mocNangBac, donNghis) : { soThang: 0 };
+    const dx = qtl ? deXuatNangLuong(qtl, qtl.ngach, soThang) : null;
     return {
       uocTinh: kq,
       thieuLuongCoSo: !lcs,
-      nangLuongKeTiep: dx ? { ...dx, ngayDenHan: iso(dx.ngayDenHan) } : null,
+      nangLuongKeTiep: dx
+        ? {
+            ...dx,
+            ngayDenHan: iso(dx.ngayDenHan),
+            soThangKeoDai: soThang,
+            lyDoKeoDai: lyDo,
+            mocNangBac: iso(dx.mocNangBacDieuChinh ?? dx.mocNangBacGoc!),
+            mocNangBacGoc: iso(dx.mocNangBacGoc!),
+          }
+        : null,
     };
   }
 }

@@ -152,6 +152,8 @@ model NhanSu {
   ngayVaoDang        DateTime?         @db.Date
   ngayChinhThucDang  DateTime?         @db.Date
   ghiChu             String?
+  /// Ảnh 3x4 (chân dung) dạng Data URL (data:image/...) hoặc đường dẫn ảnh
+  anhDaiDien         String?
   quaTrinhCongTacs   QuaTrinhCongTac[]
   vanBangs           VanBang[]
   giaDinhs           QuanHeGiaDinh[]

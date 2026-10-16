@@ -28,7 +28,17 @@ interface UocTinh {
     tongThuNhap: number;
   } | null;
   thieuLuongCoSo: boolean;
-  nangLuongKeTiep: { loai: 'NANG_BAC' | 'VUOT_KHUNG'; ngayDenHan: string; bacMoi: number; heSoMoi: number; vuotKhungMoi: number } | null;
+  nangLuongKeTiep: {
+    loai: 'NANG_BAC' | 'VUOT_KHUNG';
+    ngayDenHan: string;
+    bacMoi: number;
+    heSoMoi: number;
+    vuotKhungMoi: number;
+    soThangKeoDai?: number;
+    lyDoKeoDai?: string;
+    mocNangBac?: string;
+    mocNangBacGoc?: string;
+  } | null;
 }
 
 export function useNgachLuong() {
@@ -79,13 +89,20 @@ export default function TabLuong({ nhanSuId, coQuyenSua }: { nhanSuId: string; c
                 </Descriptions.Item>
               </Descriptions>
               {ut?.nangLuongKeTiep && (
-                <Tag icon={<RiseOutlined />} color="green" style={{ marginTop: 8, padding: '4px 10px' }}>
-                  {ut.nangLuongKeTiep.loai === 'NANG_BAC'
-                    ? `Nâng lên bậc ${ut.nangLuongKeTiep.bacMoi} (hệ số ${fmtHeSo(ut.nangLuongKeTiep.heSoMoi)})`
-                    : `Vượt khung ${ut.nangLuongKeTiep.vuotKhungMoi}%`}{' '}
-                  từ {fmtNgay(ut.nangLuongKeTiep.ngayDenHan)}
-                </Tag>
-              )}
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <Tag icon={<RiseOutlined />} color="green" style={{ padding: '4px 10px' }}>
+                      {ut.nangLuongKeTiep.loai === 'NANG_BAC'
+                        ? `Nâng lên bậc ${ut.nangLuongKeTiep.bacMoi} (hệ số ${fmtHeSo(ut.nangLuongKeTiep.heSoMoi)})`
+                        : `Vượt khung ${ut.nangLuongKeTiep.vuotKhungMoi}%`}{' '}
+                      từ {fmtNgay(ut.nangLuongKeTiep.ngayDenHan)}
+                    </Tag>
+                    {ut.nangLuongKeTiep.soThangKeoDai && ut.nangLuongKeTiep.soThangKeoDai > 0 ? (
+                      <Tag color="orange" style={{ padding: '4px 8px' }}>
+                        Lùi ${ut.nangLuongKeTiep.soThangKeoDai} tháng (${ut.nangLuongKeTiep.lyDoKeoDai?.toLowerCase() ?? 'nghỉ không lương'})
+                      </Tag>
+                    ) : null}
+                  </div>
+                )}
             </Col>
           </Row>
         </Card>

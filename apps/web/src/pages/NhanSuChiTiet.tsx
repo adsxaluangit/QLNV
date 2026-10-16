@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { App, Avatar, Button, Card, Descriptions, Empty, Popconfirm, Skeleton, Space, Tabs, Tag } from 'antd';
+import { App, Button, Card, Descriptions, Empty, Popconfirm, Skeleton, Space, Tabs, Tag } from 'antd';
 import { ArrowLeftOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import {
-  chuCaiDau,
   fmtNgay,
   MAU_TRANG_THAI,
   NHAN_GIOI_TINH,
@@ -20,6 +19,7 @@ import {
 import NhanSuForm, { HoSo } from '../components/NhanSuForm';
 import BangHoSoCon from '../components/BangHoSoCon';
 import TabLuong from '../components/TabLuong';
+import Anh3x4 from '../components/Anh3x4';
 
 interface ChiTiet {
   id: string;
@@ -35,6 +35,7 @@ interface ChiTiet {
   chucVu: { ten: string } | null;
   taiKhoan: { vaiTro: string; hoatDong: boolean; dangNhapCuoi: string | null } | null;
   coQuyenSua: boolean;
+  anhDaiDien?: string | null;
   [k: string]: unknown;
 }
 
@@ -89,10 +90,16 @@ export default function NhanSuChiTiet({ taoMoi = false, cuaToi = false }: { taoM
   return (
     <>
       <div className="ho-so-dau">
-        <Avatar size={76} style={{ fontSize: 28 }}>
-          {chuCaiDau(data.hoTen)}
-        </Avatar>
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <Anh3x4
+          nhanSuId={data.id}
+          hoTen={data.hoTen}
+          gioiTinh={data.gioiTinh}
+          anhDaiDien={data.anhDaiDien}
+          coQuyenSua={sua || (cuaToi && nguoiDung?.nhanSuId === data.id)}
+          size="lg"
+          hienHanhDong={true}
+        />
+        <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 260 }}>
           <h2>{data.hoTen}</h2>
           <div className="meta">
             <span>

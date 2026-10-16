@@ -553,12 +553,11 @@ export class NghiPhepController {
     const ns = await this.nhanSuCuaToi(u);
     if (body.denNgay < body.tuNgay) throw new BadRequestException('Đến ngày phải sau hoặc bằng từ ngày');
     if (body.nuaNgay && iso(body.tuNgay) !== iso(body.denNgay)) throw new BadRequestException('Chỉ chọn nửa ngày khi nghỉ trong một ngày');
-    const nghiDaiHan = ns.laGiangVien && body.loai === 'KHONG_LUONG'; // GV / GV kiêm nhiệm nghỉ không lương được tối đa 2 năm
-    const gioiHanNgay = nghiDaiHan ? 731 : 366;
+    const gioiHanNgay = body.loai === 'KHONG_LUONG' ? 731 : 366; // Nghỉ không lương được tối đa 2 năm
     if ((body.denNgay.getTime() - body.tuNgay.getTime()) / 86_400_000 > gioiHanNgay) {
       throw new BadRequestException(
-        nghiDaiHan
-          ? 'Khoảng nghỉ quá dài (tối đa 2 năm đối với giảng viên nghỉ không lương)'
+        body.loai === 'KHONG_LUONG'
+          ? 'Khoảng nghỉ quá dài (tối đa 2 năm đối với nghỉ không lương)'
           : 'Khoảng nghỉ quá dài (tối đa 1 năm)',
       );
     }

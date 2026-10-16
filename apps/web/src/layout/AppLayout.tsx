@@ -165,7 +165,12 @@ export default function AppLayout() {
                   {nguoiDung.phamVi ? ` · ${nguoiDung.phamVi}` : ''}
                 </small>
               </div>
-              <Avatar style={{ background: 'linear-gradient(135deg,#14b8a6,#0b4f5c)' }}>{chuCaiDau(nguoiDung.hoTen)}</Avatar>
+              <Avatar
+                src={nguoiDung.nhanSuId ? `/api/nhan-su/${nguoiDung.nhanSuId}/anh` : undefined}
+                style={{ background: 'linear-gradient(135deg,#14b8a6,#0b4f5c)' }}
+              >
+                {chuCaiDau(nguoiDung.hoTen)}
+              </Avatar>
             </div>
           </Dropdown>
         </Header>

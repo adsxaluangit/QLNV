@@ -15,6 +15,7 @@ import {
   Statistic,
   Table,
   Tag,
+  Tooltip,
   TreeSelect,
   Typography,
 } from 'antd';
@@ -38,6 +39,9 @@ export interface DongDenHan {
   heSoHienTai: number;
   vuotKhungHienTai: number;
   mocNangBac: string;
+  mocNangBacDieuChinh?: string;
+  soThangKeoDai?: number;
+  lyDoKeoDai?: string;
   loai: 'NANG_BAC' | 'VUOT_KHUNG';
   ngayDenHan: string;
   bacMoi: number;
@@ -141,7 +145,27 @@ export default function NangLuong() {
         </>
       ),
     },
-    { title: 'Mốc tính', dataIndex: 'mocNangBac', width: 125, render: (v) => <span style={{ whiteSpace: 'nowrap' }}>{fmtNgay(v)}</span> },
+    {
+      title: 'Mốc tính',
+      key: 'mocNangBac',
+      width: 145,
+      render: (_, r) => (
+        <div>
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {fmtNgay(r.mocNangBacDieuChinh ?? r.mocNangBac)}
+          </span>
+          {r.soThangKeoDai && r.soThangKeoDai > 0 ? (
+            <div>
+              <Tooltip title={`Mốc gốc: ${fmtNgay(r.mocNangBac)} • Lùi ${r.soThangKeoDai} tháng do ${r.lyDoKeoDai?.toLowerCase() ?? 'nghỉ không lương'}`}>
+                <Tag color="orange" style={{ fontSize: 11, padding: '0 4px', margin: '2px 0 0 0', cursor: 'help' }}>
+                  +${r.soThangKeoDai} thg nghỉ KL
+                </Tag>
+              </Tooltip>
+            </div>
+          ) : null}
+        </div>
+      ),
+    },
     {
       title: 'Đề xuất',
       key: 'deXuat',
@@ -276,10 +300,8 @@ export default function NangLuong() {
           scroll={{ x: 900 }}
         />
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          Căn cứ NĐ 204/2004/NĐ-CP, TT 08/2013/TT-BNV: nâng bậc sau 36 tháng (loại A0 trở lên) hoặc 24 tháng (loại B, C); ở bậc cuối
-          hưởng vượt khung 5% rồi mỗi năm thêm 1%. Hệ thống chưa trừ thời gian kéo dài do kỷ luật / không hoàn thành nhiệm vụ — TCHC cần
-          rà soát trước khi lập quyết định.
-        </Typography.Paragraph>
+            Căn cứ NĐ 204/2004/NĐ-CP, TT 08/2013/TT-BNV, TT 03/2021/TT-BNV: nâng bậc sau 36 tháng (loại A0 trở lên) hoặc 24 tháng (loại B, C); ở bậc cuối hưởng vượt khung 5% rồi mỗi năm thêm 1%. Hệ thống tự động lùi mốc và kéo dài thời hạn nâng lương tương ứng nếu có thời gian nghỉ không hưởng lương (từ 01 tháng trở lên) đã được duyệt.
+          </Typography.Paragraph>
       </Card>
 
       <Modal

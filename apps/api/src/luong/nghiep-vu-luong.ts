@@ -31,40 +31,104 @@ export function soThangGiua(tu: Date, den: Date): number {
 
 export const iso = (d: Date) => d.toISOString().slice(0, 10);
 
+export interface DonNghiLuong {
+  loai: string;
+  trangThai: string;
+  tuNgay: Date;
+  denNgay: Date;
+}
+
+export function isEndOfMonth(d: Date): boolean {
+  const next = new Date(d);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.getUTCDate() === 1;
+}
+
+/**
+ * Tính số tháng của một khoảng thời gian nghỉ (áp dụng cho nghỉ không lương theo TT 08/2013/TT-BNV, TT 03/2021/TT-BNV).
+ * - Trường hợp nghỉ trọn tháng theo lịch (từ ngày 01 đến hết ngày cuối tháng): tính theo số tháng tròn.
+ * - Trường hợp khác: tính quy đổi ngày (~30.4375 ngày/tháng, làm tròn số tháng gần nhất).
+ * - Dưới 1 tháng (dưới 30 ngày) không tính kéo dài theo quy định.
+ */
+export function tinhSoThangNghi(tu: Date, den: Date): number {
+  if (den < tu) return 0;
+  if (tu.getUTCDate() === 1 && isEndOfMonth(den)) {
+    return (den.getUTCFullYear() - tu.getUTCFullYear()) * 12 + (den.getUTCMonth() - tu.getUTCMonth()) + 1;
+  }
+  const soNgay = Math.round((den.getTime() - tu.getTime()) / 86_400_000) + 1;
+  const th = Math.round(soNgay / 30.4375);
+  return th >= 1 ? th : 0;
+}
+
+/**
+ * Tính tổng số tháng kéo dài nâng bậc do nghỉ không lương trong kỳ giữ bậc hiện tại
+ * (các đơn nghỉ không lương ĐÃ DUYỆT có thời gian giao với kỳ giữ bậc từ mocNangBac trở đi).
+ */
+export function tinhTongThangKeoDai(mocNangBac: Date, dons: DonNghiLuong[]): { soThang: number; lyDo?: string } {
+  let tongThang = 0;
+  for (const don of dons) {
+    if (don.loai !== 'KHONG_LUONG' || don.trangThai !== 'DA_DUYET') continue;
+    if (don.denNgay < mocNangBac) continue;
+    const tu = don.tuNgay < mocNangBac ? mocNangBac : don.tuNgay;
+    const den = don.denNgay;
+    const th = tinhSoThangNghi(tu, den);
+    tongThang += th;
+  }
+  return {
+    soThang: tongThang,
+    lyDo: tongThang > 0 ? `Nghỉ không lương ${tongThang} tháng` : undefined,
+  };
+}
+
 export interface DeXuatNangLuong {
   loai: 'NANG_BAC' | 'VUOT_KHUNG';
   ngayDenHan: Date;
   bacMoi: number;
   heSoMoi: number;
   vuotKhungMoi: number;
+  thangKeoDai?: number;
+  mocNangBacGoc?: Date;
+  mocNangBacDieuChinh?: Date;
 }
 
 /**
- * Tính lần nâng lương thường xuyên kế tiếp (NĐ 204/2004, TT 08/2013/TT-BNV):
- *  - Chưa tới bậc cuối: sau `thangNangBac` tháng (36 với A0 trở lên, 24 với B/C) → lên 1 bậc.
- *  - Ở bậc cuối: sau `thangNangBac` tháng → vượt khung 5%; sau đó mỗi 12 tháng +1%.
- * Chưa tính kéo dài do kỷ luật / không hoàn thành nhiệm vụ (giai đoạn sau).
+ * Tính lần nâng lương thường xuyên kế tiếp (NĐ 204/2004, TT 08/2013/TT-BNV, TT 03/2021/TT-BNV):
+ *  - Chưa tới bậc cuối: sau `thangNangBac` tháng (36 với A0 trở lên, 24 với B/C) -> lên 1 bậc.
+ *  - Ở bậc cuối: sau `thangNangBac` tháng -> vượt khung 5%; sau đó mỗi 12 tháng +1%.
+ *  - Tự động kéo dài thời hạn nâng bậc nếu có thời gian nghỉ không lương (ví dụ nghỉ 14 tháng -> lùi 14 tháng).
  */
-export function deXuatNangLuong(qtl: QuaTrinhLuong, ngach: NgachLuong | null): DeXuatNangLuong | null {
+export function deXuatNangLuong(
+  qtl: QuaTrinhLuong,
+  ngach: NgachLuong | null,
+  thangKeoDai = 0,
+): DeXuatNangLuong | null {
   if (!ngach || !qtl.bac || qtl.luongThoaThuan) return null;
   const soBac = ngach.heSo.length;
   const bacCuoi = ngach.heSo[soBac - 1];
+  const mocDieuChinh = thangKeoDai > 0 ? congThang(qtl.mocNangBac, thangKeoDai) : qtl.mocNangBac;
+
   if (qtl.bac < soBac) {
     return {
       loai: 'NANG_BAC',
-      ngayDenHan: congThang(qtl.mocNangBac, ngach.thangNangBac),
+      ngayDenHan: congThang(qtl.mocNangBac, ngach.thangNangBac + thangKeoDai),
       bacMoi: qtl.bac + 1,
       heSoMoi: ngach.heSo[qtl.bac],
       vuotKhungMoi: 0,
+      thangKeoDai,
+      mocNangBacGoc: qtl.mocNangBac,
+      mocNangBacDieuChinh: mocDieuChinh,
     };
   }
   const lanDau = qtl.phanTramVuotKhung === 0;
   return {
     loai: 'VUOT_KHUNG',
-    ngayDenHan: congThang(qtl.mocNangBac, lanDau ? ngach.thangNangBac : 12),
+    ngayDenHan: congThang(qtl.mocNangBac, (lanDau ? ngach.thangNangBac : 12) + thangKeoDai),
     bacMoi: soBac,
     heSoMoi: bacCuoi,
     vuotKhungMoi: lanDau ? 5 : qtl.phanTramVuotKhung + 1,
+    thangKeoDai,
+    mocNangBacGoc: qtl.mocNangBac,
+    mocNangBacDieuChinh: mocDieuChinh,
   };
 }
 
@@ -82,7 +146,7 @@ export interface UocTinhLuong {
   heSoPhuCapKhac: number;
   phanTramUuDai: number;
   phanTramThamNien: number;
-  /** đồng/tháng, trước khấu trừ */
+  /** Đồng/tháng, trước khấu trừ */
   tongThuNhap: number;
 }
 

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "NhanSu" ADD COLUMN IF NOT EXISTS "anhDaiDien" TEXT;
