@@ -19,6 +19,7 @@ import {
 import NhanSuForm, { HoSo } from '../components/NhanSuForm';
 import BangHoSoCon from '../components/BangHoSoCon';
 import TabLuong from '../components/TabLuong';
+import TabTaiLieu from '../components/TabTaiLieu';
 import Anh3x4 from '../components/Anh3x4';
 
 interface ChiTiet {
@@ -192,6 +193,11 @@ export default function NhanSuChiTiet({ taoMoi = false, cuaToi = false }: { taoM
                     ]}
                   />
                 ),
+              },
+              {
+                key: 'tai-lieu',
+                label: '📁 Hồ sơ & Quyết định',
+                children: <TabTaiLieu nhanSuId={data.id} coQuyenSua={sua} hoTenCanBo={data.hoTen} />,
               },
               {
                 key: 'van-bang',

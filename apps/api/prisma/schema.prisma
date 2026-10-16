@@ -164,6 +164,7 @@ model NhanSu {
   donNghis           DonNghi[]
   chamCongs          ChamCong[]
   chamCongThangs     ChamCongThang[]
+  taiLieus           TaiLieuNhanSu[]
   taiKhoan           TaiKhoan?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -501,4 +502,35 @@ model ChamCongThang {
   ghiChu        String?
 
   @@unique([nhanSuId, nam, thang])
+}
+
+enum LoaiTaiLieu {
+  QUYET_DINH_LUONG
+  QUYET_DINH_THOI_VIEC
+  QUYET_DINH_BO_NHIEM
+  HOP_DONG
+  VAN_BANG_CHUNG_CHI
+  GIAY_TO_KHAC
+}
+
+model TaiLieuNhanSu {
+  id            String       @id @default(uuid())
+  nhanSuId      String
+  nhanSu        NhanSu       @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  loai          LoaiTaiLieu  @default(GIAY_TO_KHAC)
+  ten           String
+  soHieu        String?
+  ngayBanHanh   DateTime?    @db.Date
+  coQuanBanHanh String?
+  tenFile       String
+  duongDan      String
+  dinhDang      String
+  kichThuoc     Int
+  ghiChu        String?
+  nguoiTaiLen   String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([nhanSuId, loai])
+  @@index([nhanSuId, createdAt])
 }

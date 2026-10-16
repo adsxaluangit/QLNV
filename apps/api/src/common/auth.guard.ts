@@ -29,7 +29,9 @@ export class AuthGuard implements CanActivate {
 
     const req = ctx.switchToHttp().getRequest();
     const header: string | undefined = req.headers.authorization;
-    const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+    const token = header?.startsWith('Bearer ')
+      ? header.slice(7)
+      : (typeof req.query?.token === 'string' ? req.query.token : undefined);
     if (!token) throw new UnauthorizedException('Bạn chưa đăng nhập');
 
     let payload: { sub: string; v: number };
