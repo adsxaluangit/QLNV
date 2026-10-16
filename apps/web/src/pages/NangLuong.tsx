@@ -36,7 +36,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { Link } from 'react-router-dom';
 import { api, ApiError, taiFile } from '../api';
 import { useAuth } from '../auth';
-import { coQuyenSua, fmtHeSo, fmtNgay, toIso } from '../constants';
+import { coQuyenSua, fmtHeSo, fmtNgay, fmtTien, toIso } from '../constants';
 import { cayDonVi, useCoSo, useDonVi } from '../danh-muc';
 
 export interface DongDenHan {
@@ -53,6 +53,8 @@ export interface DongDenHan {
   soThangKeoDai?: number;
   lyDoKeoDai?: string;
   loai: 'NANG_BAC' | 'VUOT_KHUNG';
+  phanLoaiVuotKhung?: 'LAN_DAU' | 'HANG_NAM';
+  tienVuotKhungDuKien?: number;
   ngayDenHan: string;
   bacMoi: number;
   heSoMoi: number;
@@ -121,9 +123,10 @@ export default function NangLuong() {
 
   const [tabHienTai, setTabHienTai] = useState<'thuong-xuyen' | 'truoc-thoi-han'>('thuong-xuyen');
 
-  // ------------------------------------------------------------- State Nâng thường xuyên
+  // ------------------------------------------------------------- State Nâng thường xuyên & Vượt khung
   const [kyHan, setKyHan] = useState(3);
   const [donViId, setDonViId] = useState<string>();
+  const [boLocLoai, setBoLocLoai] = useState<'ALL' | 'NANG_BAC' | 'LAN_DAU' | 'HANG_NAM'>('ALL');
   const [chon, setChon] = useState<string[]>([]);
   const [moQd, setMoQd] = useState(false);
   const [dangLuu, setDangLuu] = useState(false);
@@ -154,7 +157,16 @@ export default function NangLuong() {
   });
 
   const soNangBac = data.filter((d) => d.loai === 'NANG_BAC').length;
+  const soVkLanDau = data.filter((d) => d.loai === 'VUOT_KHUNG' && d.phanLoaiVuotKhung === 'LAN_DAU').length;
+  const soVkHangNam = data.filter((d) => d.loai === 'VUOT_KHUNG' && d.phanLoaiVuotKhung === 'HANG_NAM').length;
   const soQuaHan = data.filter((d) => d.quaHan).length;
+
+  const danhSachHienThi = useMemo(() => {
+    if (boLocLoai === 'NANG_BAC') return data.filter((d) => d.loai === 'NANG_BAC');
+    if (boLocLoai === 'LAN_DAU') return data.filter((d) => d.loai === 'VUOT_KHUNG' && d.phanLoaiVuotKhung === 'LAN_DAU');
+    if (boLocLoai === 'HANG_NAM') return data.filter((d) => d.loai === 'VUOT_KHUNG' && d.phanLoaiVuotKhung === 'HANG_NAM');
+    return data;
+  }, [data, boLocLoai]);
 
   // Query Nâng lương trước thời hạn
   const queryTruocHan = { nam: namXet, donViId: donViIdTruocHan };
@@ -250,11 +262,11 @@ export default function NangLuong() {
     {
       title: 'Hiện hưởng',
       key: 'hienTai',
-      width: 150,
+      width: 155,
       render: (_, r) => (
         <>
           Bậc {r.bacHienTai} • {fmtHeSo(r.heSoHienTai)}
-          {r.vuotKhungHienTai ? <Tag style={{ marginLeft: 6 }}>VK {r.vuotKhungHienTai}%</Tag> : null}
+          {r.vuotKhungHienTai ? <Tag color="purple" style={{ marginLeft: 6 }}>VK {r.vuotKhungHienTai}%</Tag> : null}
         </>
       ),
     },
@@ -280,18 +292,36 @@ export default function NangLuong() {
       ),
     },
     {
-      title: 'Đề xuất',
+      title: 'Đề xuất nâng mới',
       key: 'deXuat',
-      width: 210,
+      width: 230,
       render: (_, r) =>
         r.loai === 'NANG_BAC' ? (
           <Tag color="green" icon={<RiseOutlined />}>
             Bậc {r.bacMoi} • hệ số {fmtHeSo(r.heSoMoi)}
           </Tag>
+        ) : r.phanLoaiVuotKhung === 'LAN_DAU' ? (
+          <div>
+            <Tag color="purple" icon={<TrophyOutlined />} style={{ fontWeight: 600 }}>
+              Vượt khung 5% (Lần đầu)
+            </Tag>
+            {r.tienVuotKhungDuKien ? (
+              <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>
+                +<b>{fmtTien(r.tienVuotKhungDuKien)}</b> đ/tháng (sau 3 năm kịch khung)
+              </div>
+            ) : null}
+          </div>
         ) : (
-          <Tag color="purple" icon={<RiseOutlined />}>
-            Vượt khung {r.vuotKhungMoi}%
-          </Tag>
+          <div>
+            <Tag color="purple" icon={<RiseOutlined />}>
+              VK {r.vuotKhungHienTai}% → {r.vuotKhungMoi}% (+1%)
+            </Tag>
+            {r.tienVuotKhungDuKien ? (
+              <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>
+                +<b>{fmtTien(r.tienVuotKhungDuKien)}</b> đ/tháng (+1% hàng năm)
+              </div>
+            ) : null}
+          </div>
         ),
     },
     {
@@ -467,7 +497,7 @@ export default function NangLuong() {
             key: 'thuong-xuyen',
             label: (
               <span style={{ fontWeight: 600 }}>
-                <RiseOutlined /> Nâng bậc thường xuyên
+                <RiseOutlined /> Nâng bậc thường xuyên & Vượt khung
               </span>
             ),
           },
@@ -483,31 +513,51 @@ export default function NangLuong() {
         style={{ marginBottom: 8 }}
       />
 
-      {/* ========================================================= TAB 1: THƯỜNG XUYÊN */}
+      {/* ========================================================= TAB 1: THƯỜNG XUYÊN & VƯỢT KHUNG */}
       {tabHienTai === 'thuong-xuyen' && (
         <>
           <Alert
             type="info"
             showIcon
-            message="Chế độ nâng bậc lương thường xuyên theo hệ số Nhà nước (Nghị định 204/2004/NĐ-CP)"
-            description="Chỉ áp dụng đối với ngạch bậc Viên chức. Cán bộ thuộc diện Hợp đồng Lao động hưởng lương thỏa thuận, không áp dụng nâng lương ngạch bậc."
+            message="Chế độ nâng bậc lương thường xuyên & Phụ cấp thâm niên vượt khung (Nghị định 204/2004/NĐ-CP)"
+            description={
+              <div>
+                <div>• <b>Nâng bậc thường xuyên:</b> 36 tháng (ngạch loại A0 - A3 như Giảng viên) hoặc 24 tháng (ngạch B, C như Nhân viên).</div>
+                <div>• <b>Phụ cấp thâm niên vượt khung:</b> Khi đã kịch khung bậc lương cao nhất, đủ <b>3 năm (36 tháng)</b> được hưởng <b>5%</b> lần đầu; cứ mỗi <b>1 năm (12 tháng)</b> tiếp theo được cộng thêm <b>1%</b>.</div>
+              </div>
+            }
             style={{ marginBottom: 16 }}
           />
 
-          <Row gutter={[20, 20]}>
-            <Col xs={24} md={8}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12} md={6}>
               <Card className="the-so" style={{ color: '#0e7c86' }}>
                 <Statistic title="Đến hạn trong kỳ" value={data.length} suffix="cán bộ" />
               </Card>
             </Col>
-            <Col xs={12} md={8}>
+            <Col xs={24} sm={12} md={6}>
               <Card className="the-so" style={{ color: '#16a34a' }}>
-                <Statistic title="Nâng bậc thường xuyên" value={soNangBac} valueStyle={{ color: '#16a34a' }} />
+                <Statistic title="Nâng bậc (Bậc 1 → Bậc cuối)" value={soNangBac} valueStyle={{ color: '#16a34a' }} />
               </Card>
             </Col>
-            <Col xs={12} md={8}>
-              <Card className="the-so" style={{ color: '#7c3aed' }}>
-                <Statistic title="Phụ cấp thâm niên vượt khung" value={data.length - soNangBac} valueStyle={{ color: '#7c3aed' }} />
+            <Col xs={24} sm={12} md={6}>
+              <Card className="the-so" style={{ color: '#7c3aed', borderColor: '#ddd6fe' }}>
+                <Statistic
+                  title="Vượt khung 5% (Lần đầu)"
+                  value={soVkLanDau}
+                  suffix="người"
+                  valueStyle={{ color: '#6d28d9', fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Card className="the-so" style={{ color: '#9333ea', borderColor: '#f3e8ff' }}>
+                <Statistic
+                  title="Vượt khung +1% (Hàng năm)"
+                  value={soVkHangNam}
+                  suffix="người"
+                  valueStyle={{ color: '#9333ea', fontWeight: 700 }}
+                />
               </Card>
             </Col>
           </Row>
@@ -515,7 +565,7 @@ export default function NangLuong() {
           <Card className="card-mem" style={{ marginTop: 20 }}>
             <Space wrap style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
               <Space wrap>
-                <span>Đến hạn trong:</span>
+                <span><b>Kỳ hạn:</b></span>
                 <Segmented
                   options={KY_HAN}
                   value={kyHan}
@@ -534,19 +584,42 @@ export default function NangLuong() {
                     setDonViId(v);
                     setChon([]);
                   }}
-                  style={{ width: 260 }}
+                  style={{ width: 220 }}
                   treeDefaultExpandAll
                   showSearch
                   treeNodeFilterProp="title"
                 />
+                <Segmented
+                  value={boLocLoai}
+                  onChange={(v) => {
+                    setBoLocLoai(v as 'ALL' | 'NANG_BAC' | 'LAN_DAU' | 'HANG_NAM');
+                    setChon([]);
+                  }}
+                  options={[
+                    { label: `Tất cả (${data.length})`, value: 'ALL' },
+                    { label: `Nâng bậc (${soNangBac})`, value: 'NANG_BAC' },
+                    { label: `VK 5% lần đầu (${soVkLanDau})`, value: 'LAN_DAU' },
+                    { label: `VK +1% hàng năm (${soVkHangNam})`, value: 'HANG_NAM' },
+                  ]}
+                />
               </Space>
+
               <Space wrap>
                 <Button
                   icon={<FileExcelOutlined />}
                   onClick={() => taiFile('/nang-luong/xuat-excel', { query }).catch((e) => message.error(e.message))}
                   id="xuat-den-han"
                 >
-                  Xuất danh sách
+                  Xuất danh sách nâng lương
+                </Button>
+                <Button
+                  icon={<FileExcelOutlined style={{ color: '#7c3aed' }} />}
+                  onClick={() =>
+                    taiFile('/nang-luong/vuot-khung/xuat-excel', { query }).catch((e) => message.error(e.message))
+                  }
+                  id="xuat-vuot-khung"
+                >
+                  Xuất DS Vượt khung riêng
                 </Button>
                 {sua && (
                   <Button
@@ -572,7 +645,7 @@ export default function NangLuong() {
                 showIcon
                 icon={<WarningOutlined />}
                 style={{ marginBottom: 16 }}
-                message={`${soQuaHan} cán bộ đã đến hạn nhưng chưa có quyết định nâng lương.`}
+                message={`${soQuaHan} cán bộ đã đến hạn nhưng chưa có quyết định nâng lương / vượt khung.`}
               />
             )}
 
@@ -580,15 +653,15 @@ export default function NangLuong() {
               rowKey="nhanSuId"
               size="middle"
               loading={isLoading}
-              dataSource={data}
+              dataSource={danhSachHienThi}
               columns={cotThuongXuyen}
               pagination={{ pageSize: 50, hideOnSinglePage: true }}
               rowSelection={sua ? { selectedRowKeys: chon, onChange: (k) => setChon(k as string[]) } : undefined}
-              locale={{ emptyText: 'Không có cán bộ đến hạn trong kỳ' }}
-              scroll={{ x: 900 }}
+              locale={{ emptyText: 'Không có cán bộ đến hạn trong kỳ lọc đã chọn' }}
+              scroll={{ x: 950 }}
             />
             <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-              Căn cứ NĐ 204/2004/NĐ-CP, TT 08/2013/TT-BNV, TT 03/2021/TT-BNV: nâng bậc sau 36 tháng (loại A0 trở lên) hoặc 24 tháng (loại B, C); ở bậc cuối hưởng vượt khung 5% rồi mỗi năm thêm 1%. Hệ thống tự động lùi mốc và kéo dài thời hạn nếu có thời gian nghỉ không hưởng lương.
+              Căn cứ NĐ 204/2004/NĐ-CP, TT 04/2005/TT-BNV, TT 08/2013/TT-BNV: nâng bậc sau 36 tháng (ngạch A0-A3) hoặc 24 tháng (ngạch B, C); khi kịch khung bậc cuối cùng, sau 3 năm hưởng vượt khung 5%, sau đó cứ mỗi năm (+12 tháng) tính thêm 1%. Hệ thống tự động tính tiền vượt khung và lùi mốc nếu có nghỉ không lương.
             </Typography.Paragraph>
           </Card>
         </>
@@ -751,17 +824,17 @@ export default function NangLuong() {
         </>
       )}
 
-      {/* MODAL LẬP QUYẾT ĐỊNH THƯỜNG XUYÊN */}
+      {/* MODAL LẬP QUYẾT ĐỊNH THƯỜNG XUYÊN & VƯỢT KHUNG */}
       <Modal
         open={moQd}
-        title="Lập quyết định nâng lương thường xuyên"
+        title="Lập quyết định nâng bậc lương / Phụ cấp thâm niên vượt khung"
         okText="Cập nhật quá trình lương"
         cancelText="Hủy"
         confirmLoading={dangLuu}
         onCancel={() => setMoQd(false)}
         onOk={() =>
           modal.confirm({
-            title: `Xác nhận nâng lương cho ${chon.length} cán bộ?`,
+            title: `Xác nhận nâng lương / vượt khung cho ${chon.length} cán bộ?`,
             content: 'Mỗi cán bộ sẽ được thêm một dòng quá trình lương mới với ngày hưởng = ngày đến hạn.',
             okText: 'Xác nhận',
             cancelText: 'Xem lại',
@@ -783,7 +856,7 @@ export default function NangLuong() {
               </Form.Item>
             </Col>
             <Col span={24}>
-              <Form.Item name="ghiChu" label="Ghi chú" extra="Để trống: tự ghi “Nâng bậc lương thường xuyên” / “Hưởng phụ cấp thâm niên vượt khung”">
+              <Form.Item name="ghiChu" label="Ghi chú" extra="Để trống: hệ thống sẽ tự điền chính xác theo từng người: “Nâng bậc lương thường xuyên” hoặc “Hưởng phụ cấp thâm niên vượt khung 5% (sau 36 tháng kịch khung)” hoặc “Nâng phụ cấp thâm niên vượt khung (+1%)”.">
                 <Input.TextArea rows={2} />
               </Form.Item>
             </Col>

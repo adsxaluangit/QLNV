@@ -171,6 +171,8 @@ export interface DongDenHan {
   soThangKeoDai?: number;
   lyDoKeoDai?: string;
   loai: 'NANG_BAC' | 'VUOT_KHUNG';
+  phanLoaiVuotKhung?: 'LAN_DAU' | 'HANG_NAM';
+  tienVuotKhungDuKien?: number;
   ngayDenHan: string;
   bacMoi: number;
   heSoMoi: number;
@@ -207,38 +209,53 @@ export class NangLuongController {
 
   /** Danh sách cán bộ đến hạn nâng lương thường xuyên tính đến `denNgay` (mặc định +3 tháng). */
   async denHan(u: NguoiDung, denNgay: Date, donViId?: string, nhanSuIds?: string[]): Promise<DongDenHan[]> {
-    const ds = await this.prisma.nhanSu.findMany({
-      where: {
-        AND: [
-          await this.scope.nhanSuWhere(u),
-          { trangThai: DANG_LAM },
-          { loaiNhanSu: 'VIEN_CHUC' },
-          donViId ? { donViId: { in: await this.scope.donViVaCon(donViId) } } : {},
-          nhanSuIds ? { id: { in: nhanSuIds } } : {},
-        ],
-      },
-      select: {
-        id: true,
-        maCanBo: true,
-        hoTen: true,
-        ten: true,
-        donVi: { select: { ten: true } },
-        quaTrinhLuongs: { orderBy: [{ tuNgay: 'desc' }, { createdAt: 'desc' }], take: 1, include: { ngach: true } },
-        donNghis: {
-          where: { loai: 'KHONG_LUONG', trangThai: 'DA_DUYET' },
-          select: { tuNgay: true, denNgay: true, loai: true, trangThai: true },
-        },
-      },
-      orderBy: [{ ten: 'asc' }, { hoTen: 'asc' }],
-    });
     const homNay = new Date();
+    const [ds, lcs] = await Promise.all([
+      this.prisma.nhanSu.findMany({
+        where: {
+          AND: [
+            await this.scope.nhanSuWhere(u),
+            { trangThai: DANG_LAM },
+            { loaiNhanSu: 'VIEN_CHUC' },
+            donViId ? { donViId: { in: await this.scope.donViVaCon(donViId) } } : {},
+            nhanSuIds ? { id: { in: nhanSuIds } } : {},
+          ],
+        },
+        select: {
+          id: true,
+          maCanBo: true,
+          hoTen: true,
+          ten: true,
+          donVi: { select: { ten: true } },
+          quaTrinhLuongs: { orderBy: [{ tuNgay: 'desc' }, { createdAt: 'desc' }], take: 1, include: { ngach: true } },
+          donNghis: {
+            where: { loai: 'KHONG_LUONG', trangThai: 'DA_DUYET' },
+            select: { tuNgay: true, denNgay: true, loai: true, trangThai: true },
+          },
+        },
+        orderBy: [{ ten: 'asc' }, { hoTen: 'asc' }],
+      }),
+      this.prisma.luongCoSo.findFirst({
+        where: { tuNgay: { lte: homNay } },
+        orderBy: { tuNgay: 'desc' },
+      }),
+    ]);
+
+    const mucLuongCoSo = lcs?.mucLuong ?? 2340000;
     const kq: DongDenHan[] = [];
+
     for (const ns of ds) {
       const qtl = ns.quaTrinhLuongs[0];
       if (!qtl?.ngach || !qtl.bac || qtl.luongThoaThuan) continue;
       const { soThang, lyDo } = tinhTongThangKeoDai(qtl.mocNangBac, ns.donNghis ?? []);
       const dx = deXuatNangLuong(qtl, qtl.ngach, soThang);
       if (!dx || dx.ngayDenHan > denNgay) continue;
+
+      const lanDau = qtl.phanTramVuotKhung === 0;
+      const phanLoaiVuotKhung = dx.loai === 'VUOT_KHUNG' ? (lanDau ? 'LAN_DAU' : 'HANG_NAM') : undefined;
+      const tienVuotKhungDuKien =
+        dx.loai === 'VUOT_KHUNG' ? Math.round(mucLuongCoSo * dx.heSoMoi * (dx.vuotKhungMoi / 100)) : undefined;
+
       kq.push({
         nhanSuId: ns.id,
         maCanBo: ns.maCanBo,
@@ -253,6 +270,8 @@ export class NangLuongController {
         soThangKeoDai: soThang,
         lyDoKeoDai: lyDo,
         loai: dx.loai,
+        phanLoaiVuotKhung,
+        tienVuotKhungDuKien,
         ngayDenHan: iso(dx.ngayDenHan),
         bacMoi: dx.bacMoi,
         heSoMoi: dx.heSoMoi,
@@ -315,7 +334,7 @@ export class NangLuongController {
         d.heSoHienTai,
         d.vuotKhungHienTai || '',
         mocHienThi,
-        d.loai === 'NANG_BAC' ? 'Nâng bậc' : 'Vượt khung',
+        d.loai === 'NANG_BAC' ? 'Nâng bậc' : d.phanLoaiVuotKhung === 'LAN_DAU' ? 'Vượt khung 5% (Lần đầu)' : `VK +1% (${d.vuotKhungMoi}%)`,
         dmy(d.ngayDenHan),
         `Bậc ${d.bacMoi} / ${d.heSoMoi.toFixed(2)}`,
         d.vuotKhungMoi || '',
@@ -332,7 +351,110 @@ export class NangLuongController {
     guiFile(res, buf, `DenHanNangLuong_${iso(denNgay)}.xlsx`);
   }
 
-  /** Lập quyết định nâng lương thường xuyên cho các cán bộ đã chọn. */
+  /** Xuất Excel danh sách riêng cho các cán bộ đến hạn hưởng phụ cấp thâm niên vượt khung. */
+  @Roles(...QUYEN_XEM_DS)
+  @Get('nang-luong/vuot-khung/xuat-excel')
+  async xuatExcelVuotKhung(
+    @CurrentUser() u: NguoiDung,
+    @Query(new ZodPipe(denHanQuery)) q: z.infer<typeof denHanQuery>,
+    @Res() res: Response,
+  ) {
+    const denNgay = q.denNgay ?? congThang(new Date(), 3);
+    const dsToanBo = await this.denHan(u, denNgay, q.donViId);
+    const ds = dsToanBo.filter((d) => d.loai === 'VUOT_KHUNG');
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Vuot khung');
+    ws.mergeCells('A1:L1');
+    ws.getCell('A1').value = `DANH SÁCH CÁN BỘ ĐẾN HẠN HƯỞNG PHỤ CẤP THÂM NIÊN VƯỢT KHUNG (đến ngày ${denNgay
+      .toISOString()
+      .slice(0, 10)
+      .split('-')
+      .reverse()
+      .join('/')})`;
+    ws.getCell('A1').font = { bold: true, size: 13 };
+    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 36;
+
+    ws.mergeCells('A2:L2');
+    ws.getCell('A2').value = `(Căn cứ Điều 6 Nghị định 204/2004/NĐ-CP, Thông tư 04/2005/TT-BNV và Thông tư 08/2013/TT-BNV của Bộ Nội vụ)`;
+    ws.getCell('A2').font = { italic: true, size: 10 };
+    ws.getCell('A2').alignment = { horizontal: 'center' };
+    ws.getRow(2).height = 20;
+
+    const tieuDe = [
+      'STT',
+      'Mã cán bộ (CCCD)',
+      'Họ và tên',
+      'Đơn vị',
+      'Mã ngạch',
+      'Bậc cuối cùng',
+      'Hệ số bậc cuối',
+      '% VK hiện hưởng',
+      'Mốc tính',
+      'Phân loại vượt khung',
+      'Ngày hưởng mới',
+      '% VK mới',
+    ];
+    ws.getRow(4).values = tieuDe;
+    ws.getRow(4).font = { bold: true, color: { argb: 'FFFFFF' } };
+    ws.getRow(4).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    ws.getRow(4).height = 32;
+    for (let c = 1; c <= tieuDe.length; c++) {
+      ws.getCell(4, c).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '7C3AED' },
+      };
+    }
+
+    const rong = [6, 16, 26, 24, 12, 12, 14, 14, 14, 28, 14, 12];
+    rong.forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    const dmy = (s: string) => s.split('-').reverse().join('/');
+
+    ds.forEach((d, i) => {
+      const phanLoai =
+        d.phanLoaiVuotKhung === 'LAN_DAU'
+          ? 'Hưởng 5% lần đầu (sau 36 tháng kịch khung)'
+          : `Tăng thêm +1% hàng năm (${d.vuotKhungHienTai}% → ${d.vuotKhungMoi}%)`;
+      const mocHienThi =
+        d.soThangKeoDai && d.soThangKeoDai > 0
+          ? `${dmy(d.mocNangBacDieuChinh ?? d.mocNangBac)} (+${d.soThangKeoDai} thg)`
+          : dmy(d.mocNangBac);
+
+      ws.addRow([
+        i + 1,
+        d.maCanBo,
+        d.hoTen,
+        d.donVi,
+        d.ngach.ma,
+        `Bậc ${d.bacHienTai}`,
+        d.heSoHienTai.toFixed(2),
+        d.vuotKhungHienTai ? `${d.vuotKhungHienTai}%` : '0%',
+        mocHienThi,
+        phanLoai,
+        dmy(d.ngayDenHan),
+        `${d.vuotKhungMoi}%`,
+      ]);
+    });
+
+    ws.eachRow((row, n) => {
+      if (n < 4) return;
+      row.eachCell({ includeEmpty: true }, (c) => {
+        c.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+    ws.getColumn(2).numFmt = '@';
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    guiFile(res, buf, `DenHanVuotKhung_${iso(denNgay)}.xlsx`);
+  }
+
+  /** Lập quyết định nâng lương thường xuyên / vượt khung cho các cán bộ đã chọn. */
   @Roles(...QUYEN_SUA)
   @Post('nang-luong/lap-quyet-dinh')
   async lapQuyetDinh(@CurrentUser() u: NguoiDung, @Body(new ZodPipe(lapQdSchema)) body: z.infer<typeof lapQdSchema>) {
@@ -340,8 +462,15 @@ export class NangLuongController {
     const thieu = body.nhanSuIds.filter((id) => !ds.some((d) => d.nhanSuId === id));
     if (thieu.length) throw new BadRequestException(`${thieu.length} cán bộ không còn đủ điều kiện nâng lương hoặc ngoài phạm vi`);
     await this.prisma.$transaction(
-      ds.map((d) =>
-        this.prisma.quaTrinhLuong.create({
+      ds.map((d) => {
+        let ghiChuMacDinh = 'Nâng bậc lương thường xuyên';
+        if (d.loai === 'VUOT_KHUNG') {
+          ghiChuMacDinh =
+            d.phanLoaiVuotKhung === 'LAN_DAU'
+              ? 'Hưởng phụ cấp thâm niên vượt khung 5% (sau 36 tháng giữ bậc cuối)'
+              : `Nâng phụ cấp thâm niên vượt khung từ ${d.vuotKhungHienTai}% lên ${d.vuotKhungMoi}% (+1%)`;
+        }
+        return this.prisma.quaTrinhLuong.create({
           data: {
             nhanSuId: d.nhanSuId,
             tuNgay: new Date(`${d.ngayDenHan}T00:00:00.000Z`),
@@ -352,12 +481,12 @@ export class NangLuongController {
             phanTramVuotKhung: d.vuotKhungMoi,
             soQuyetDinh: body.soQuyetDinh,
             ngayQuyetDinh: body.ngayQuyetDinh,
-            ghiChu: body.ghiChu ?? (d.loai === 'NANG_BAC' ? 'Nâng bậc lương thường xuyên' : 'Hưởng phụ cấp thâm niên vượt khung'),
+            ghiChu: body.ghiChu ?? ghiChuMacDinh,
           },
-        }),
-      ),
+        });
+      }),
     );
-    await this.audit.ghi(u, 'TAO', 'QuaTrinhLuong', null, `Lập QĐ nâng lương ${body.soQuyetDinh} cho ${ds.length} cán bộ`, {
+    await this.audit.ghi(u, 'TAO', 'QuaTrinhLuong', null, `Lập QĐ nâng lương/vượt khung ${body.soQuyetDinh} cho ${ds.length} cán bộ`, {
       nhanSuIds: body.nhanSuIds,
     });
     return { soLuong: ds.length };
@@ -423,15 +552,11 @@ export class NangLuongController {
       const mocDieuChinh = soThang > 0 ? congThang(qtl.mocNangBac, soThang) : qtl.mocNangBac;
       const ngayDenHanThuongXuyen = congThang(qtl.mocNangBac, qtl.ngach.thangNangBac + soThang);
 
-      // Tính số tháng còn thiếu tính đến ngày 31/12 của năm xét
-      // Khoảng cách từ 31/12 đến ngày đến hạn thường xuyên
       const thangThieu =
         (ngayDenHanThuongXuyen.getUTCFullYear() - mocXet.getUTCFullYear()) * 12 +
         ngayDenHanThuongXuyen.getUTCMonth() -
         mocXet.getUTCMonth();
 
-      // Theo TT 08/2013: còn thiếu từ 01 đến 12 tháng để được nâng bậc thường xuyên
-      // Cho phép hiển thị người có số tháng thiếu từ 1 đến 12 tháng (người đến hạn trong năm tiếp theo)
       if (thangThieu < 1 || thangThieu > 12) continue;
 
       const kiemTra2Lan = kiemTraNangTruocThoiHanLanTruoc(qtl, ns.quaTrinhLuongs[1], qtl.ngach);
@@ -631,7 +756,7 @@ export class NangLuongController {
           data: {
             nhanSuId: uv.nhanSuId,
             tuNgay: ngayHuongMoi,
-            mocNangBac: ngayHuongMoi, // Mốc tính nâng bậc lần sau theo TT 08/2013 tính từ ngày hưởng bậc mới!
+            mocNangBac: ngayHuongMoi,
             ngachId: uv.ngach.id,
             bac: uv.bacMoi,
             heSo: uv.heSoMoi,

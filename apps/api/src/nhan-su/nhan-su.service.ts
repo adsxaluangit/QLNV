@@ -106,7 +106,25 @@ export class NhanSuService {
     if (!this.scope.coQuyenSua(u)) throw new ForbiddenException('Bạn không có quyền thêm hồ sơ');
     await this.scope.kiemTraDonVi(u, data.donViId);
     await this.kiemTraTrung(data.maCanBo);
-    const ns = await this.prisma.nhanSu.create({ data: { ...data, ten: layTen(data.hoTen) } });
+    const { ghiQuaTrinhCongTac, ngayChuyenDonVi, soQuyetDinhDieuDong, ghiChuDieuDong, ...nhanSuData } = data;
+    const ns = await this.prisma.nhanSu.create({
+      data: { ...nhanSuData, ten: layTen(nhanSuData.hoTen) },
+      include: { donVi: true, chucVu: true },
+    });
+    // Tự động khởi tạo 1 bản ghi công tác ban đầu cho cán bộ mới
+    if (ns.donViId && ns.donVi) {
+      const tuNgay = ns.ngayVaoTruong || ns.ngayTuyenDung || new Date();
+      await this.prisma.quaTrinhCongTac.create({
+        data: {
+          nhanSuId: ns.id,
+          tuNgay,
+          denNgay: null,
+          noiCongTac: ns.donVi.ten,
+          chucVu: ns.chucVu?.ten || null,
+          ghiChu: 'Công tác từ khi tiếp nhận',
+        },
+      });
+    }
     await this.audit.ghi(u, 'TAO', 'NhanSu', ns.id, `Thêm hồ sơ ${ns.hoTen} (${ns.maCanBo})`, undefined, ip);
     return ns;
   }
@@ -115,21 +133,87 @@ export class NhanSuService {
     await this.scope.kiemTraSua(u, id);
     await this.scope.kiemTraDonVi(u, data.donViId);
     await this.kiemTraTrung(data.maCanBo, id);
-    const cu = await this.prisma.nhanSu.findUniqueOrThrow({ where: { id } });
+    const { ghiQuaTrinhCongTac, ngayChuyenDonVi, soQuyetDinhDieuDong, ghiChuDieuDong, ...nhanSuData } = data;
+    const cu = await this.prisma.nhanSu.findUniqueOrThrow({
+      where: { id },
+      include: { donVi: true, chucVu: true },
+    });
+    const donViThayDoi = cu.donViId !== nhanSuData.donViId;
+    const chucVuThayDoi = cu.chucVuId !== nhanSuData.chucVuId;
+    const coThayDoiCongTac = donViThayDoi || chucVuThayDoi;
+
     const ns = await this.prisma.$transaction(async (tx) => {
-      const moi = await tx.nhanSu.update({ where: { id }, data: { ...data, ten: layTen(data.hoTen) } });
+      const moi = await tx.nhanSu.update({
+        where: { id },
+        data: { ...nhanSuData, ten: layTen(nhanSuData.hoTen) },
+        include: { donVi: true, chucVu: true },
+      });
       // Tên đăng nhập luôn trùng mã cán bộ (CCCD)
       if (cu.maCanBo !== moi.maCanBo) {
         await tx.taiKhoan.updateMany({ where: { nhanSuId: id }, data: { tenDangNhap: moi.maCanBo } });
       }
+
+      // Tự động ghi nhận vào Quá trình công tác nếu có thay đổi đơn vị/chức vụ và được kích hoạt
+      if (coThayDoiCongTac && ghiQuaTrinhCongTac !== false) {
+        const ngayChuyen = ngayChuyenDonVi ? new Date(ngayChuyenDonVi) : new Date();
+        ngayChuyen.setHours(0, 0, 0, 0);
+
+        const cacQuaTrinh = await tx.quaTrinhCongTac.findMany({
+          where: { nhanSuId: id },
+          orderBy: { tuNgay: 'asc' },
+        });
+
+        const banGhiDangMo = cacQuaTrinh.find((qt) => !qt.denNgay);
+
+        if (banGhiDangMo) {
+          let denNgayCu = new Date(ngayChuyen);
+          if (denNgayCu > banGhiDangMo.tuNgay) {
+            denNgayCu = new Date(ngayChuyen.getTime() - 24 * 60 * 60 * 1000);
+          }
+          await tx.quaTrinhCongTac.update({
+            where: { id: banGhiDangMo.id },
+            data: { denNgay: denNgayCu },
+          });
+        } else if (cacQuaTrinh.length === 0 && cu.donVi) {
+          const tuNgayCu = cu.ngayVaoTruong || cu.ngayTuyenDung || new Date(2020, 0, 1);
+          let denNgayCu = new Date(ngayChuyen);
+          if (denNgayCu > tuNgayCu) {
+            denNgayCu = new Date(ngayChuyen.getTime() - 24 * 60 * 60 * 1000);
+          }
+          await tx.quaTrinhCongTac.create({
+            data: {
+              nhanSuId: id,
+              tuNgay: tuNgayCu,
+              denNgay: denNgayCu,
+              noiCongTac: cu.donVi.ten,
+              chucVu: cu.chucVu?.ten || null,
+              ghiChu: 'Công tác trước khi điều động',
+            },
+          });
+        }
+
+        await tx.quaTrinhCongTac.create({
+          data: {
+            nhanSuId: id,
+            tuNgay: ngayChuyen,
+            denNgay: null,
+            noiCongTac: moi.donVi?.ten || '',
+            chucVu: moi.chucVu?.ten || null,
+            soQuyetDinh: soQuyetDinhDieuDong || null,
+            ghiChu: ghiChuDieuDong || (donViThayDoi ? `Điều động từ ${cu.donVi?.ten || 'đơn vị cũ'}` : 'Thay đổi chức vụ'),
+          },
+        });
+      }
+
       return moi;
     });
+
     if (cu.laGiangVien !== ns.laGiangVien || cu.kiemNhiem !== ns.kiemNhiem || cu.loaiNhanSu !== ns.loaiNhanSu || String(cu.ngayTuyenDung) !== String(ns.ngayTuyenDung)) {
       await dongBoQuyPhepNamNay(this.prisma, id);
     }
     const thayDoi = khacBiet(cu, ns);
     if (Object.keys(thayDoi).length) {
-      await this.audit.ghi(u, 'SUA', 'NhanSu', id, `Sửa hồ sơ ${ns.hoTen} (${ns.maCanBo})`, thayDoi, ip);
+      await this.audit.ghi(u, 'SUA', 'NhanSu', id, `Sửa hồ sơ ${ns.hoTen} (${ns.maCanBo})${coThayDoiCongTac ? ' - Điều động/chuyển công tác' : ''}`, thayDoi, ip);
     }
     return ns;
   }

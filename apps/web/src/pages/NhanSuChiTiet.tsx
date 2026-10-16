@@ -160,6 +160,7 @@ export default function NhanSuChiTiet({ taoMoi = false, cuaToi = false }: { taoM
             onDaLuu={() => {
               setDangSua(false);
               qc.invalidateQueries({ queryKey: ['nhan-su'] });
+              qc.invalidateQueries({ queryKey: ['ho-so-con'] });
             }}
           />
         </Card>

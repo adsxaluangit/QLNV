@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Alert, App, AutoComplete, Button, Checkbox, Col, DatePicker, Form, Input, Row, Select, Space, TreeSelect } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
-import { Dayjs } from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { api, ApiError } from '../api';
 import { canhBaoCccd } from '../cccd';
 import { LY_LUAN_CT, NHAN_GIOI_TINH, NHAN_LOAI_NS, NHAN_TRANG_THAI, NHAN_TRINH_DO, toDayjs, toIso, tuyChon } from '../constants';
 import { cayDonVi, useChucVu, useCoSo, useDonVi } from '../danh-muc';
 
-const TRUONG_NGAY = ['ngaySinh', 'ngayCapCccd', 'ngayTuyenDung', 'ngayVaoTruong', 'ngayVaoDang', 'ngayChinhThucDang'];
+const TRUONG_NGAY = ['ngaySinh', 'ngayCapCccd', 'ngayTuyenDung', 'ngayVaoTruong', 'ngayVaoDang', 'ngayChinhThucDang', 'ngayChuyenDonVi'];
 
 export type HoSo = Record<string, unknown> & { id?: string };
 
@@ -55,6 +55,25 @@ export default function NhanSuForm({
   const laGiangVien = Form.useWatch('laGiangVien', form) as boolean | undefined;
   const laVN = !quocTich || /^vi[eệ]t\s*nam$|^vn$/i.test(quocTich.trim());
   const canhBao = laVN ? canhBaoCccd(ma, gioiTinh, ngaySinh?.year()) : [];
+
+  const donViIdHienTai = Form.useWatch('donViId', form) as string | undefined;
+  const chucVuIdHienTai = Form.useWatch('chucVuId', form) as string | null | undefined;
+  const donViThayDoi = Boolean(banDau?.id && donViIdHienTai && donViIdHienTai !== banDau.donViId);
+  const chucVuThayDoi = Boolean(
+    banDau?.id &&
+    chucVuIdHienTai !== undefined &&
+    (chucVuIdHienTai ?? null) !== (banDau.chucVuId ?? null)
+  );
+  const coThayDoiCongTac = donViThayDoi || chucVuThayDoi;
+
+  useEffect(() => {
+    if (coThayDoiCongTac && !form.getFieldValue('ngayChuyenDonVi')) {
+      form.setFieldsValue({
+        ghiQuaTrinhCongTac: true,
+        ngayChuyenDonVi: dayjs(),
+      });
+    }
+  }, [coThayDoiCongTac, form]);
 
   const luu = async (v: Record<string, unknown>) => {
     const body: Record<string, unknown> = {};
@@ -203,6 +222,73 @@ export default function NhanSuForm({
             <Select allowClear showSearch optionFilterProp="label" options={chucVu.data?.map((c) => ({ value: c.id, label: c.ten }))} />
           </Form.Item>
         </Col>
+        {coThayDoiCongTac && (
+          <Col xs={24}>
+            <Alert
+              type="info"
+              showIcon
+              style={{
+                marginBottom: 16,
+                borderRadius: 8,
+                border: '1px solid #91caff',
+                backgroundColor: '#e6f4ff',
+              }}
+              message={
+                <span style={{ fontWeight: 600, color: '#0958d9' }}>
+                  Phát hiện thay đổi {donViThayDoi && chucVuThayDoi ? 'Đơn vị và Chức vụ' : donViThayDoi ? 'Đơn vị công tác' : 'Chức vụ'}
+                </span>
+              }
+              description={
+                <div style={{ marginTop: 8 }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: 13, color: '#1f1f1f' }}>
+                    Hệ thống sẽ tự động ghi nhận biến động này vào tab <strong>Quá trình công tác</strong> (khép lại thời gian ở đơn vị/vị trí cũ và bắt đầu mốc mới tại vị trí mới).
+                  </p>
+                  <Row gutter={16}>
+                    <Col xs={24} md={6}>
+                      <Form.Item
+                        name="ghiQuaTrinhCongTac"
+                        valuePropName="checked"
+                        initialValue={true}
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Checkbox defaultChecked>Lưu vào Quá trình công tác</Checkbox>
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={6}>
+                      <Form.Item
+                        name="ngayChuyenDonVi"
+                        label="Ngày hiệu lực điều động / chuyển"
+                        initialValue={dayjs()}
+                        rules={[{ required: true, message: 'Chọn ngày chuyển' }]}
+                        style={{ marginBottom: 8 }}
+                      >
+                        <DatePicker format="DD/MM/YYYY" placeholder="dd/mm/yyyy" style={{ width: '100%' }} />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={6}>
+                      <Form.Item
+                        name="soQuyetDinhDieuDong"
+                        label="Số quyết định điều động / bổ nhiệm"
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Input placeholder="VD: 125/QĐ-ĐHHH (nếu có)" />
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} md={6}>
+                      <Form.Item
+                        name="ghiChuDieuDong"
+                        label="Ghi chú điều động"
+                        style={{ marginBottom: 8 }}
+                      >
+                        <Input placeholder="VD: Chuyển công tác theo QĐ..." />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </div>
+              }
+            />
+          </Col>
+        )}
         <Col xs={12} md={5}>
           <Form.Item name="loaiNhanSu" label="Loại nhân sự">
             <Select options={tuyChon(NHAN_LOAI_NS)} />
