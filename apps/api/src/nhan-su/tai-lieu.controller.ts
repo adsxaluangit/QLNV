@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Res,
@@ -59,7 +60,16 @@ interface TaoTaiLieuBody {
   ghiChu?: string;
 }
 
-@Controller('nhan-su/:nhanSuId/tai-lieu')
+interface SuaTaiLieuBody {
+  ten?: string;
+  loai?: LoaiTaiLieu;
+  soHieu?: string;
+  ngayBanHanh?: string;
+  coQuanBanHanh?: string;
+  ghiChu?: string;
+}
+
+@Controller('tai-lieu')
 export class TaiLieuNhanSuController {
   constructor(
     private readonly prisma: PrismaService,
@@ -67,7 +77,7 @@ export class TaiLieuNhanSuController {
     private readonly audit: AuditService,
   ) {}
 
-  @Get()
+  @Get(':nhanSuId')
   async danhSach(
     @CurrentUser() u: NguoiDung,
     @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string,
@@ -102,7 +112,7 @@ export class TaiLieuNhanSuController {
     }));
   }
 
-  @Post()
+  @Post(':nhanSuId')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
   async tao(
     @CurrentUser() u: NguoiDung,
@@ -164,7 +174,96 @@ export class TaiLieuNhanSuController {
     };
   }
 
-  @Get(':id/xem')
+  @Patch(':nhanSuId/:id')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  async sua(
+    @CurrentUser() u: NguoiDung,
+    @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: SuaTaiLieuBody,
+  ) {
+    await this.scope.kiemTraSua(u, nhanSuId);
+
+    const doc = await this.prisma.taiLieuNhanSu.findFirst({
+      where: { id, nhanSuId },
+      include: { nhanSu: { select: { hoTen: true } } },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu');
+
+    let tenFile = doc.tenFile;
+    let duongDan = doc.duongDan;
+    let dinhDang = doc.dinhDang;
+    let kichThuoc = doc.kichThuoc;
+
+    // Nếu người dùng tải file mới để thay thế
+    if (file) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const hopLe =
+        LOAI_FILE_CHO_PHEP.includes(file.mimetype) ||
+        ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+      if (!hopLe) {
+        throw new BadRequestException('Chỉ chấp nhận file PDF, Word, Excel hoặc ảnh');
+      }
+
+      // Xóa file cũ
+      const duongDanCu = path.join(UPLOAD_ROOT, doc.duongDan);
+      if (fs.existsSync(duongDanCu)) {
+        try {
+          fs.unlinkSync(duongDanCu);
+        } catch (e) {
+          console.error('Lỗi khi xóa file cũ:', e);
+        }
+      }
+
+      // Lưu file mới
+      const tenGocSach = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const tenLuu = `${Date.now()}_${randomUUID().slice(0, 8)}_${tenGocSach}`;
+      const duongDanMoiTuyetDoi = path.join(TAI_LIEU_DIR, tenLuu);
+      fs.writeFileSync(duongDanMoiTuyetDoi, file.buffer);
+
+      tenFile = file.originalname;
+      duongDan = path.relative(UPLOAD_ROOT, duongDanMoiTuyetDoi).replace(/\\/g, '/');
+      dinhDang = file.mimetype || 'application/octet-stream';
+      kichThuoc = file.size;
+    }
+
+    const updated = await this.prisma.taiLieuNhanSu.update({
+      where: { id },
+      data: {
+        ten: body.ten?.trim() ? body.ten.trim() : doc.ten,
+        loai: body.loai && Object.values(LoaiTaiLieu).includes(body.loai) ? body.loai : doc.loai,
+        soHieu: body.soHieu !== undefined ? (body.soHieu ? body.soHieu.trim() : null) : doc.soHieu,
+        ngayBanHanh:
+          body.ngayBanHanh !== undefined ? (body.ngayBanHanh ? new Date(body.ngayBanHanh) : null) : doc.ngayBanHanh,
+        coQuanBanHanh:
+          body.coQuanBanHanh !== undefined ? (body.coQuanBanHanh ? body.coQuanBanHanh.trim() : null) : doc.coQuanBanHanh,
+        ghiChu: body.ghiChu !== undefined ? (body.ghiChu ? body.ghiChu.trim() : null) : doc.ghiChu,
+        tenFile,
+        duongDan,
+        dinhDang,
+        kichThuoc,
+      },
+    });
+
+    await this.audit.ghi(
+      u,
+      'SUA',
+      'TaiLieuNhanSu',
+      id,
+      `Cập nhật tài liệu "${updated.ten}" của cán bộ ${doc.nhanSu.hoTen}`,
+    );
+
+    return {
+      ...updated,
+      tenLoai: NHAN_LOAI_TAI_LIEU[updated.loai],
+      ngayBanHanh: updated.ngayBanHanh ? updated.ngayBanHanh.toISOString().slice(0, 10) : null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+  }
+
+  @Get(':nhanSuId/:id/xem')
   async xem(
     @CurrentUser() u: NguoiDung,
     @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string,
@@ -186,7 +285,7 @@ export class TaiLieuNhanSuController {
     fs.createReadStream(duongDanDayDu).pipe(res);
   }
 
-  @Get(':id/tai-ve')
+  @Get(':nhanSuId/:id/tai-ve')
   async taiVe(
     @CurrentUser() u: NguoiDung,
     @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string,
@@ -208,7 +307,7 @@ export class TaiLieuNhanSuController {
     fs.createReadStream(duongDanDayDu).pipe(res);
   }
 
-  @Delete(':id')
+  @Delete(':nhanSuId/:id')
   async xoa(
     @CurrentUser() u: NguoiDung,
     @Param('nhanSuId', ParseUUIDPipe) nhanSuId: string,
