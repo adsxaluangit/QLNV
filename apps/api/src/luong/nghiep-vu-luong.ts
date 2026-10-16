@@ -153,7 +153,7 @@ export interface UocTinhLuong {
 /**
  * Ước tính lương ngạch bậc + phụ cấp tại một ngày (tham khảo cho TCHC;
  * bảng lương chính thức sẽ do phân hệ Lương tính, có khấu trừ BH, thuế).
- *  - Vượt khung = % × hệ số bậc cuối
+ *  - Vượt khung = % * hệ số bậc cuối
  *  - Ưu đãi nghề, thâm niên nhà giáo tính trên (hệ số + PC chức vụ + vượt khung)
  */
 export function uocTinhLuong(
@@ -185,4 +185,69 @@ export function uocTinhLuong(
     phanTramThamNien: tn,
     tongThuNhap,
   };
+}
+
+// ================================================================
+// NÂNG BẬC LƯƠNG TRƯỚC THỜI HẠN DO LẬP THÀNH TÍCH XUẤT SẮC
+// (Thông tư 08/2013/TT-BNV, Thông tư 03/2021/TT-BNV)
+// ================================================================
+
+export interface UngVienNangLuongTruocThoiHan {
+  nhanSuId: string;
+  maCanBo: string;
+  hoTen: string;
+  donVi: string;
+  chucVu?: string;
+  ngach: { id: string; ma: string; ten: string };
+  bacHienTai: number;
+  heSoHienTai: number;
+  vuotKhungHienTai?: number;
+  mocNangBac: string;
+  mocNangBacDieuChinh?: string;
+  soThangKeoDai?: number;
+  lyDoKeoDai?: string;
+  ngayDenHanThuongXuyen: string;
+  soThangConThieu: number; // Tính đến ngày mốc xét (1 - 12 tháng)
+  bacMoi: number;
+  heSoMoi: number;
+  daNangTruocThoiHanLanTruoc: boolean;
+  lyDoKhongDuDieuKien?: string;
+  // Ngày hưởng mới ứng với 3 mức rút ngắn
+  ngayHuong12Thang: string;
+  ngayHuong9Thang: string;
+  ngayHuong6Thang: string;
+}
+
+/**
+ * Kiểm tra xem viên chức đã từng nâng lương trước thời hạn ở lần nâng liền kề trước hay chưa
+ * (Quy định: Không thực hiện hai lần liên tiếp nâng bậc lương trước thời hạn do lập thành tích xuất sắc trong cùng ngạch).
+ */
+export function kiemTraNangTruocThoiHanLanTruoc(
+  qtlHienTai: QuaTrinhLuong,
+  qtlTruoc?: QuaTrinhLuong | null,
+  ngach?: NgachLuong | null,
+): { daNang: boolean; lyDo?: string } {
+  const ghiChu = (qtlHienTai.ghiChu || '').toLowerCase();
+  if (
+    ghiChu.includes('trước thời hạn') ||
+    ghiChu.includes('truoc thoi han') ||
+    ghiChu.includes('ttxs') ||
+    ghiChu.includes('thành tích xuất sắc') ||
+    ghiChu.includes('thanh tich xuat sac')
+  ) {
+    return {
+      daNang: true,
+      lyDo: `Lần nâng liền kề trước (${iso(qtlHienTai.tuNgay)}) đã được nâng trước thời hạn (QĐ: ${qtlHienTai.soQuyetDinh || 'đã lưu'}).`,
+    };
+  }
+  if (qtlTruoc && ngach && qtlTruoc.ngachId === qtlHienTai.ngachId && qtlTruoc.tuNgay && qtlHienTai.tuNgay) {
+    const khoangThang = soThangGiua(qtlTruoc.tuNgay, qtlHienTai.tuNgay);
+    if (khoangThang > 0 && khoangThang < ngach.thangNangBac) {
+      return {
+        daNang: true,
+        lyDo: `Lần nâng liền kề trước sau ${khoangThang} tháng (< ${ngach.thangNangBac} tháng chuẩn của ngạch).`,
+      };
+    }
+  }
+  return { daNang: false };
 }
