@@ -15,6 +15,7 @@ import {
   TeamOutlined,
   RiseOutlined,
   TableOutlined,
+  FileExcelOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api';
@@ -39,6 +40,7 @@ const MENU: Muc[] = [
   { key: '/nhan-su', icon: <TeamOutlined />, label: 'Hồ sơ nhân sự', vaiTro: QUAN_LY },
   { key: '/to-chuc', icon: <ApartmentOutlined />, label: 'Cơ cấu tổ chức', vaiTro: QUAN_LY },
   { key: '/nang-luong', icon: <RiseOutlined />, label: 'Nâng lương', vaiTro: QUAN_LY },
+  { key: '/bang-luong', icon: <FileExcelOutlined style={{ color: '#10b981' }} />, label: 'Bảng thanh toán lương', vaiTro: QUAN_LY },
   { key: '/danh-muc-luong', icon: <TableOutlined />, label: 'Danh mục lương', vaiTro: QUAN_LY },
   { key: '/ho-so-cua-toi', icon: <IdcardOutlined />, label: 'Hồ sơ của tôi', canNhanSu: true },
   { key: '/nghi-phep', icon: <CalendarOutlined />, label: 'Nghỉ phép của tôi', canNhanSu: true },
@@ -56,6 +58,7 @@ const TIEU_DE: [RegExp, string][] = [
   [/^\/nhan-su/, 'Hồ sơ nhân sự'],
   [/^\/to-chuc/, 'Cơ cấu tổ chức'],
   [/^\/nang-luong/, 'Nâng bậc lương thường xuyên & vượt khung'],
+  [/^\/bang-luong/, 'Bảng thanh toán tiền lương'],
   [/^\/danh-muc-luong/, 'Danh mục lương'],
   [/^\/ho-so-cua-toi/, 'Hồ sơ của tôi'],
   [/^\/nghi-phep/, 'Nghỉ phép của tôi'],

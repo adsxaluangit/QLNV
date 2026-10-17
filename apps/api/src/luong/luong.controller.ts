@@ -454,6 +454,42 @@ export class NangLuongController {
     guiFile(res, buf, `DenHanVuotKhung_${iso(denNgay)}.xlsx`);
   }
 
+  /** Xuất Bảng thanh toán tiền lương chuẩn theo mẫu của Trường. */
+  @Get('bang-luong/xuat-excel')
+  async xuatBangLuong(@CurrentUser() u: NguoiDung, @Res() res: Response) {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.join(process.cwd(), 'uploads', 'Bang_Luong_Thang_10_2026.xlsx');
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('Chưa có file bảng lương tháng 10/2026');
+    }
+    const buf = fs.readFileSync(filePath);
+    guiFile(res, buf, 'Bang_Luong_Thang_10_2026.xlsx');
+  }
+
+  @Get('luong/bang-luong/xuat-excel')
+  async xuatBangLuongAlias(@CurrentUser() u: NguoiDung, @Res() res: Response) {
+    return this.xuatBangLuong(u, res);
+  }
+
+  /** Xuất Bảng tổng hợp quỹ lương theo Quý và Năm. */
+  @Get('bang-luong/xuat-excel-tong-hop')
+  async xuatBangTongHop(@CurrentUser() u: NguoiDung, @Res() res: Response) {
+    const fs = await import('fs');
+    const path = await import('path');
+    const filePath = path.join(process.cwd(), 'uploads', 'Bang_Tong_Hop_Luong_Quy_Nam_2026.xlsx');
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('Chưa có file bảng tổng hợp lương năm 2026');
+    }
+    const buf = fs.readFileSync(filePath);
+    guiFile(res, buf, 'Bang_Tong_Hop_Luong_Quy_Nam_2026.xlsx');
+  }
+
+  @Get('luong/bang-luong/xuat-excel-tong-hop')
+  async xuatBangTongHopAlias(@CurrentUser() u: NguoiDung, @Res() res: Response) {
+    return this.xuatBangTongHop(u, res);
+  }
+
   /** Lập quyết định nâng lương thường xuyên / vượt khung cho các cán bộ đã chọn. */
   @Roles(...QUYEN_SUA)
   @Post('nang-luong/lap-quyet-dinh')

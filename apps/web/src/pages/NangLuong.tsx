@@ -621,6 +621,17 @@ export default function NangLuong() {
                 >
                   Xuất DS Vượt khung riêng
                 </Button>
+                <Button
+                  type="primary"
+                  style={{ background: '#059669', borderColor: '#059669' }}
+                  icon={<FileExcelOutlined />}
+                  onClick={() =>
+                    taiFile('/bang-luong/xuat-excel').catch((e) => message.error(e.message))
+                  }
+                  id="xuat-bang-luong"
+                >
+                  Xuất Bảng thanh toán tiền lương
+                </Button>
                 {sua && (
                   <Button
                     type="primary"
