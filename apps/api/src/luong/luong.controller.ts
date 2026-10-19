@@ -463,8 +463,201 @@ export class NangLuongController {
     if (!fs.existsSync(filePath)) {
       throw new BadRequestException('Chưa có file bảng lương tháng 10/2026');
     }
-    const buf = fs.readFileSync(filePath);
-    guiFile(res, buf, 'Bang_Luong_Thang_10_2026.xlsx');
+
+    try {
+      const nam = 2026;
+      const thang = 10;
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.readFile(filePath);
+
+      // Đồng bộ động Sheet 'Làm thêm giờ' theo CSDL chấm công hiện tại
+      const { tongHopCong, soNgayTrongThang } = await import('../cham-cong/nghiep-vu-cong');
+      const dauThang = new Date(Date.UTC(nam, thang - 1, 1));
+      const cuoiThang = new Date(Date.UTC(nam, thang - 1, soNgayTrongThang(nam, thang)));
+
+      const [leList, congList] = await Promise.all([
+        this.prisma.ngayNghiLe.findMany({ where: { ngay: { gte: dauThang, lte: cuoiThang } } }),
+        this.prisma.chamCong.findMany({
+          where: { ngay: { gte: dauThang, lte: cuoiThang } },
+          include: { nhanSu: { select: { id: true, hoTen: true, maCanBo: true, donVi: { select: { ten: true } }, chucVu: { select: { ten: true } } } } },
+        }),
+      ]);
+
+      const leSet = new Set(leList.map((l) => l.ngay.getUTCDate()));
+      const mapCong = new Map<string, Record<number, string>>();
+      const mapMeta = new Map<string, any>();
+
+      for (const c of congList) {
+        const m = mapCong.get(c.nhanSuId) ?? {};
+        m[c.ngay.getUTCDate()] = c.kyHieu;
+        mapCong.set(c.nhanSuId, m);
+        mapMeta.set(c.nhanSuId, c.nhanSu);
+      }
+
+      const dsLamThem: { meta: any; tong: any }[] = [];
+      for (const [id, cong] of mapCong.entries()) {
+        const t = tongHopCong(cong, nam, thang, leSet);
+        if ((t.tongGioLamThem ?? 0) > 0) {
+          dsLamThem.push({ meta: mapMeta.get(id), tong: t });
+        }
+      }
+
+      const wsOt = wb.worksheets.find((w) => /th[êe]m/i.test(w.name)) || wb.getWorksheet('Làm thêm giờ');
+      if (wsOt) {
+        // Lấy thông tin lương từ Bảng Lương T10-2026
+        const wsMain = wb.worksheets.find((w) => /b[ảa]ng\s+l[ươu]ng/i.test(w.name)) || wb.worksheets[0];
+        const mapLuong = new Map<string, { hsLuong: number; hspc: number; chucVu: string }>();
+        if (wsMain) {
+          for (let r = 11; r <= wsMain.rowCount; r++) {
+            const ten = wsMain.getCell(`D${r}`).value;
+            if (ten && typeof ten === 'string' && ten.trim()) {
+              const hsL = Number(wsMain.getCell(`F${r}`).value) || 0;
+              const hspcCv = Number(wsMain.getCell(`G${r}`).value) || 0;
+              const hspcVk = Number(wsMain.getCell(`H${r}`).value) || 0;
+              const hspcTn = Number(wsMain.getCell(`K${r}`).value) || 0;
+              mapLuong.set(ten.trim(), {
+                hsLuong: hsL,
+                hspc: hspcCv + hspcVk + hspcTn,
+                chucVu: (wsMain.getCell(`E${r}`).value as string) || '',
+              });
+            }
+          }
+        }
+
+        // Gỡ tất cả các merged cells từ dòng 11 trở đi để tránh xung đột ExcelJS
+        const toUnmerge: string[] = [];
+        for (const [key, val] of Object.entries((wsOt as any)._merges || {})) {
+          const m = val as any;
+          const top = m.model ? m.model.top : parseInt(key.match(/\d+/)?.[0] || '0', 10);
+          if (top >= 11) {
+            toUnmerge.push(`${m.tl}:${m.br}`);
+          }
+        }
+        for (const rng of toUnmerge) {
+          try { wsOt.unMergeCells(rng); } catch {}
+        }
+
+        // Xóa nội dung các dòng từ 11 đến cuối bảng cũ
+        const maxR = Math.max(wsOt.rowCount, 35);
+        for (let r = 11; r <= maxR; r++) {
+          wsOt.getRow(r).values = [];
+        }
+
+        let rIdx = 11;
+        if (dsLamThem.length === 0) {
+          wsOt.mergeCells(`A${rIdx}:R${rIdx}`);
+          const c = wsOt.getCell(`A${rIdx}`);
+          c.value = 'Trong tháng không có cán bộ, nhân viên phát sinh làm thêm giờ.';
+          c.font = { name: 'Times New Roman', size: 11, italic: true };
+          c.alignment = { horizontal: 'center', vertical: 'middle' };
+          wsOt.getRow(rIdx).height = 30;
+          rIdx++;
+        } else {
+          dsLamThem.sort((a, b) => (a.meta.donVi?.ten || '').localeCompare(b.meta.donVi?.ten || ''));
+          let stt = 0;
+          for (const item of dsLamThem) {
+            stt++;
+            const m = item.meta;
+            const t = item.tong;
+            const sal = mapLuong.get(m.hoTen) || { hsLuong: 0, hspc: 0, chucVu: m.chucVu?.ten || '' };
+
+            wsOt.getCell(rIdx, 1).value = stt;
+            wsOt.getCell(rIdx, 2).value = m.maCanBo || '';
+            wsOt.getCell(rIdx, 3).value = m.hoTen;
+            wsOt.getCell(rIdx, 4).value = sal.chucVu || m.chucVu?.ten || '';
+            wsOt.getCell(rIdx, 5).value = m.donVi?.ten || '';
+            wsOt.getCell(rIdx, 6).value = sal.hsLuong;
+            wsOt.getCell(rIdx, 7).value = sal.hspc;
+            wsOt.getCell(rIdx, 8).value = { formula: `(F${rIdx}+G${rIdx})*2530000` };
+            wsOt.getCell(rIdx, 9).value = { formula: `ROUND(H${rIdx}/176, 0)` };
+            wsOt.getCell(rIdx, 10).value = t.gioLamThemNgayThuong || 0;
+            wsOt.getCell(rIdx, 11).value = { formula: `ROUND(J${rIdx}*I${rIdx}*1.5, 0)` };
+            wsOt.getCell(rIdx, 12).value = t.gioLamThemCuoiTuan || 0;
+            wsOt.getCell(rIdx, 13).value = { formula: `ROUND(L${rIdx}*I${rIdx}*2, 0)` };
+            wsOt.getCell(rIdx, 14).value = t.gioLamThemNgayLe || 0;
+            wsOt.getCell(rIdx, 15).value = { formula: `ROUND(N${rIdx}*I${rIdx}*3, 0)` };
+            wsOt.getCell(rIdx, 16).value = { formula: `J${rIdx}+L${rIdx}+N${rIdx}` };
+            wsOt.getCell(rIdx, 17).value = { formula: `K${rIdx}+M${rIdx}+O${rIdx}` };
+            wsOt.getCell(rIdx, 18).value = 'Chuyển khoản';
+
+            wsOt.getRow(rIdx).height = 24;
+            rIdx++;
+          }
+        }
+
+        // Hàng tổng cộng
+        const cuoi = rIdx - 1;
+        wsOt.mergeCells(`A${rIdx}:E${rIdx}`);
+        wsOt.getCell(`A${rIdx}`).value = 'Tổng cộng';
+        wsOt.getCell(`A${rIdx}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`A${rIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        ['H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q'].forEach((col) => {
+          const c = wsOt.getCell(`${col}${rIdx}`);
+          c.value = dsLamThem.length ? { formula: `SUM(${col}11:${col}${cuoi})` } : 0;
+          c.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: col === 'Q' ? 'FFB91C1C' : 'FF000000' } };
+          c.alignment = { horizontal: 'right', vertical: 'middle' };
+          c.numFmt = ['J', 'L', 'N', 'P'].includes(col) ? '#,##0.0' : '#,##0';
+        });
+
+        // Khung chữ ký
+        const rSig = rIdx + 2;
+        wsOt.mergeCells(`M${rSig}:R${rSig}`);
+        wsOt.getCell(`M${rSig}`).value = `Hải Phòng, ngày 31 tháng ${thang} năm ${nam}`;
+        wsOt.getCell(`M${rSig}`).font = { name: 'Times New Roman', size: 11, italic: true };
+        wsOt.getCell(`M${rSig}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const rTitle = rSig + 1;
+        wsOt.mergeCells(`A${rTitle}:C${rTitle}`);
+        wsOt.getCell(`A${rTitle}`).value = 'NGƯỜI LẬP BẢNG';
+        wsOt.getCell(`A${rTitle}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`A${rTitle}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        wsOt.mergeCells(`D${rTitle}:G${rTitle}`);
+        wsOt.getCell(`D${rTitle}`).value = 'KẾ TOÁN TRƯỞNG';
+        wsOt.getCell(`D${rTitle}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`D${rTitle}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        wsOt.mergeCells(`H${rTitle}:L${rTitle}`);
+        wsOt.getCell(`H${rTitle}`).value = 'TRƯỞNG PHÒNG TCHC';
+        wsOt.getCell(`H${rTitle}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`H${rTitle}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        wsOt.mergeCells(`M${rTitle}:R${rTitle}`);
+        wsOt.getCell(`M${rTitle}`).value = 'HIỆU TRƯỞNG';
+        wsOt.getCell(`M${rTitle}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`M${rTitle}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const rSub = rTitle + 1;
+        wsOt.mergeCells(`A${rSub}:C${rSub}`); wsOt.getCell(`A${rSub}`).value = '(Ký, họ tên)'; wsOt.getCell(`A${rSub}`).font = { name: 'Times New Roman', size: 9.5, italic: true }; wsOt.getCell(`A${rSub}`).alignment = { horizontal: 'center' };
+        wsOt.mergeCells(`D${rSub}:G${rSub}`); wsOt.getCell(`D${rSub}`).value = '(Ký, họ tên)'; wsOt.getCell(`D${rSub}`).font = { name: 'Times New Roman', size: 9.5, italic: true }; wsOt.getCell(`D${rSub}`).alignment = { horizontal: 'center' };
+        wsOt.mergeCells(`H${rSub}:L${rSub}`); wsOt.getCell(`H${rSub}`).value = '(Ký, họ tên)'; wsOt.getCell(`H${rSub}`).font = { name: 'Times New Roman', size: 9.5, italic: true }; wsOt.getCell(`H${rSub}`).alignment = { horizontal: 'center' };
+        wsOt.mergeCells(`M${rSub}:R${rSub}`); wsOt.getCell(`M${rSub}`).value = '(Ký, đóng dấu, họ tên)'; wsOt.getCell(`M${rSub}`).font = { name: 'Times New Roman', size: 9.5, italic: true }; wsOt.getCell(`M${rSub}`).alignment = { horizontal: 'center' };
+
+        const rName = rSub + 4;
+        wsOt.mergeCells(`M${rName}:R${rName}`);
+        wsOt.getCell(`M${rName}`).value = 'Đỗ Văn Tuấn';
+        wsOt.getCell(`M${rName}`).font = { name: 'Times New Roman', size: 11, bold: true };
+        wsOt.getCell(`M${rName}`).alignment = { horizontal: 'center', vertical: 'middle' };
+
+        const rNote = rName + 3;
+        wsOt.getCell(`A${rNote}`).value = 'Ghi chú chế độ thanh toán làm thêm giờ:';
+        wsOt.getCell(`A${rNote}`).font = { name: 'Times New Roman', size: 10, bold: true };
+        wsOt.getCell(`A${rNote + 1}`).value = '1. Căn cứ Điều 98 Bộ luật Lao động 2019 và Thông tư liên tịch số 08/2005/TTLT-BNV-BTC ngày 05/01/2005.';
+        wsOt.getCell(`A${rNote + 1}`).font = { name: 'Times New Roman', size: 9.5, italic: true };
+        wsOt.getCell(`A${rNote + 2}`).value = '2. Tiền lương 1 giờ làm việc bình thường = (Tiền lương theo hệ số + PC chức vụ + PC vượt khung + PC thâm niên GV) / (22 ngày chuẩn × 8 giờ = 176 giờ).';
+        wsOt.getCell(`A${rNote + 2}`).font = { name: 'Times New Roman', size: 9.5, italic: true };
+        wsOt.getCell(`A${rNote + 3}`).value = '3. Mức thanh toán: Ngày thường = 150%; Ngày nghỉ hằng tuần (T7, CN) = 200%; Ngày nghỉ lễ, tết = 300% đơn giá tiền lương 1 giờ bình thường.';
+        wsOt.getCell(`A${rNote + 3}`).font = { name: 'Times New Roman', size: 9.5, italic: true };
+      }
+
+      const bufOut = Buffer.from(await wb.xlsx.writeBuffer());
+      guiFile(res, bufOut, 'Bang_Luong_Thang_10_2026.xlsx');
+    } catch (err) {
+      console.error('Lỗi khi đồng bộ Sheet Làm thêm giờ:', err);
+      const buf = fs.readFileSync(filePath);
+      guiFile(res, buf, 'Bang_Luong_Thang_10_2026.xlsx');
+    }
   }
 
   @Get('luong/bang-luong/xuat-excel')

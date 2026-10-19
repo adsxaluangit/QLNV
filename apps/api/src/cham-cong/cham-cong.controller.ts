@@ -47,7 +47,7 @@ const tongHopQuery = z.object({
 });
 const luuSchema = thangQuery.extend({
   cells: z
-    .array(z.object({ nhanSuId: z.string().uuid(), ngay: z.number().int().min(1).max(31), kyHieu: z.string().trim().max(6).nullable() }))
+    .array(z.object({ nhanSuId: z.string().uuid(), ngay: z.number().int().min(1).max(31), kyHieu: z.string().trim().max(10).nullable() }))
     .min(1)
     .max(2000),
 });
@@ -62,10 +62,6 @@ const thangSchema = z.object({
 });
 
 const utc = (nam: number, thang: number, ngay: number) => new Date(Date.UTC(nam, thang - 1, ngay));
-const homNay = () => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
-};
 
 function guiFile(res: Response, buf: Buffer, ten: string) {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -216,7 +212,7 @@ export class ChamCongController {
         goiY: goiY.get(n.id) ?? {},
         luongKhoan: ph?.luongKhoan ?? null,
         theoQuyetDinh: ph?.theoQuyetDinh ?? null,
-        tong: tongHopCong(Object.values(o)),
+        tong: tongHopCong(o, nam, thang, le),
       };
     });
     return {
@@ -288,62 +284,75 @@ export class ChamCongController {
       le,
     );
     const soNgay = soNgayTrongThang(body.nam, body.thang);
-    const dau = utc(body.nam, body.thang, 1);
-    const co = await this.prisma.chamCong.findMany({
-      where: { nhanSuId: { in: nhanSus.map((n) => n.id) }, ngay: { gte: dau, lte: utc(body.nam, body.thang, soNgay) } },
+    const homNay = new Date();
+    const homNayUtc = new Date(Date.UTC(homNay.getFullYear(), homNay.getMonth(), homNay.getDate()));
+    const ids = nhanSus.map((n) => n.id);
+    const daCo = await this.prisma.chamCong.findMany({
+      where: { nhanSuId: { in: ids }, ngay: { gte: utc(body.nam, body.thang, 1), lte: utc(body.nam, body.thang, soNgay) } },
       select: { nhanSuId: true, ngay: true },
     });
-    const daCo = new Set(co.map((c) => `${c.nhanSuId}|${c.ngay.getUTCDate()}`));
-    const today = homNay();
+    const tapDaCo = new Set(daCo.map((c) => `${c.nhanSuId}|${c.ngay.getUTCDate()}`));
     const data: { nhanSuId: string; ngay: Date; kyHieu: string; nguoiCham: string }[] = [];
-    for (const n of nhanSus) {
+    for (const ns of nhanSus) {
+      const tuyen = ns.ngayTuyenDung ? new Date(ns.ngayTuyenDung) : null;
       for (let d = 1; d <= soNgay; d++) {
-        if (!body.ghiDe && daCo.has(`${n.id}|${d}`)) continue;
-        const ngay = utc(body.nam, body.thang, d);
-        if (n.ngayTuyenDung && ngay < n.ngayTuyenDung) continue;
-        if (laCuoiTuan(body.nam, body.thang, d)) continue;
-        let k: string | undefined = goiY.get(n.id)?.[d];
-        if (!k && le.has(d)) k = 'L';
-        if (!k && ngay <= today) k = '+';
-        if (k) data.push({ nhanSuId: n.id, ngay, kyHieu: k, nguoiCham: u.tenDangNhap });
+        if (!body.ghiDe && tapDaCo.has(`${ns.id}|${d}`)) continue;
+        const t = utc(body.nam, body.thang, d);
+        if (tuyen && t < tuyen) continue;
+        if (t > homNayUtc) continue;
+        const cuoiTuan = laCuoiTuan(body.nam, body.thang, d);
+        const gy = goiY.get(ns.id)?.[d];
+        let k: string | null = null;
+        if (gy) k = gy;
+        else if (le.has(d)) k = 'L';
+        else if (!cuoiTuan) k = '+';
+        if (k) data.push({ nhanSuId: ns.id, ngay: t, kyHieu: k, nguoiCham: u.tenDangNhap });
       }
     }
-    await this.prisma.$transaction(async (tx) => {
-      if (body.ghiDe) {
-        await tx.chamCong.deleteMany({ where: { nhanSuId: { in: nhanSus.map((n) => n.id) }, ngay: { gte: dau, lte: utc(body.nam, body.thang, soNgay) } } });
-      }
-      await tx.chamCong.createMany({ data, skipDuplicates: true });
-    });
-    await this.audit.ghi(u, 'SUA', 'ChamCong', body.donViId, `Điền sẵn chấm công tháng ${body.thang}/${body.nam} (${data.length} ô)`, undefined, ip);
+    if (data.length) {
+      await this.prisma.$transaction(
+        data.map((d) =>
+          this.prisma.chamCong.upsert({
+            where: { nhanSuId_ngay: { nhanSuId: d.nhanSuId, ngay: d.ngay } },
+            create: d,
+            update: { kyHieu: d.kyHieu, nguoiCham: d.nguoiCham },
+          }),
+        ),
+      );
+    }
+    await this.audit.ghi(u, 'TAO', 'ChamCong', null, `Điền mặc định ${data.length} ô chấm công tháng ${body.thang}/${body.nam}`, undefined, ip);
     return { soO: data.length };
   }
 
-  @Patch('thang')
-  async capNhatThang(@CurrentUser() u: NguoiDung, @Body(new ZodPipe(thangSchema)) body: z.infer<typeof thangSchema>) {
-    const ns = await this.prisma.nhanSu.findUniqueOrThrow({ where: { id: body.nhanSuId }, select: { donViId: true } });
-    await this.kiemTraCham(u, ns.donViId);
-    await this.kiemTraKhoa(u, ns.donViId, body.nam, body.thang);
-    await this.prisma.chamCongThang.upsert({
-      where: { nhanSuId_nam_thang: { nhanSuId: body.nhanSuId, nam: body.nam, thang: body.thang } },
-      create: { nhanSuId: body.nhanSuId, nam: body.nam, thang: body.thang, luongKhoan: body.luongKhoan, theoQuyetDinh: body.theoQuyetDinh },
-      update: { luongKhoan: body.luongKhoan, theoQuyetDinh: body.theoQuyetDinh },
-    });
-    return { ok: true };
-  }
-
+  // ------------------------------------------------------------ Chốt sổ
   @Post('chot')
   async chot(@CurrentUser() u: NguoiDung, @Body(new ZodPipe(chotSchema)) body: z.infer<typeof chotSchema>, @Ip() ip: string) {
     await this.kiemTraCham(u, body.donViId);
     if (!body.chot && u.vaiTro !== 'QUAN_TRI' && u.vaiTro !== 'TCHC') {
-      throw new ForbiddenException('Chỉ Phòng TCHC hoặc Quản trị mới được mở lại bảng đã chốt');
+      throw new ForbiddenException('Chỉ Quản trị và Phòng TCHC mới có quyền mở lại bảng chấm công');
     }
-    await this.prisma.bangChamCong.upsert({
+    const b = await this.prisma.bangChamCong.upsert({
       where: { donViId_nam_thang: { donViId: body.donViId, nam: body.nam, thang: body.thang } },
       create: { donViId: body.donViId, nam: body.nam, thang: body.thang, daChot: body.chot, nguoiChot: body.chot ? u.tenDangNhap : null, ngayChot: body.chot ? new Date() : null },
       update: { daChot: body.chot, nguoiChot: body.chot ? u.tenDangNhap : null, ngayChot: body.chot ? new Date() : null },
     });
-    await this.audit.ghi(u, 'SUA', 'ChamCong', body.donViId, `${body.chot ? 'Chốt' : 'Mở lại'} bảng chấm công tháng ${body.thang}/${body.nam}`, undefined, ip);
-    return { ok: true };
+    await this.audit.ghi(u, 'SUA', 'BangChamCong', b.id, `${body.chot ? 'Chốt' : 'Mở lại'} bảng chấm công tháng ${body.thang}/${body.nam}`, undefined, ip);
+    return b;
+  }
+
+  // ------------------------------------------------------------ Số liệu tháng
+  @Patch('thang')
+  async suaThang(@CurrentUser() u: NguoiDung, @Body(new ZodPipe(thangSchema)) body: z.infer<typeof thangSchema>, @Ip() ip: string) {
+    const ns = await this.prisma.nhanSu.findUniqueOrThrow({ where: { id: body.nhanSuId }, select: { donViId: true, hoTen: true } });
+    await this.kiemTraCham(u, ns.donViId);
+    await this.kiemTraKhoa(u, ns.donViId, body.nam, body.thang);
+    const t = await this.prisma.chamCongThang.upsert({
+      where: { nhanSuId_nam_thang: { nhanSuId: body.nhanSuId, nam: body.nam, thang: body.thang } },
+      create: { nhanSuId: body.nhanSuId, nam: body.nam, thang: body.thang, luongKhoan: body.luongKhoan, theoQuyetDinh: body.theoQuyetDinh },
+      update: { luongKhoan: body.luongKhoan, theoQuyetDinh: body.theoQuyetDinh },
+    });
+    await this.audit.ghi(u, 'SUA', 'ChamCongThang', t.id, `Cập nhật số liệu tháng ${body.thang}/${body.nam} cho ${ns.hoTen}`, undefined, ip);
+    return t;
   }
 
   // ------------------------------------------------------------ Xuất Excel
@@ -358,6 +367,10 @@ export class ChamCongController {
       select: { hoTen: true },
     });
     const wb = new ExcelJS.Workbook();
+    
+    // ==========================================================
+    // SHEET 1: BẢNG CHẤM CÔNG CHÍNH CỦA ĐƠN VỊ
+    // ==========================================================
     const ws = wb.addWorksheet(`T${String(q.thang).padStart(2, '0')}.${q.nam}`, { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
     const SN = b.soNgay;
     const COT_NGAY = 4; // cột D
@@ -415,7 +428,7 @@ export class ChamCongController {
     [6, 28, 9].forEach((w, i) => (ws.getColumn(i + 1).width = w));
     for (let i = 0; i < 7; i++) ws.getColumn(cs + i).width = i < 3 ? 11 : 12;
 
-    // Dữ liệu
+    // Dữ liệu Sheet 1
     let r = H4 + 1;
     const dau = r;
     const nghiBangMau = (c: ExcelJS.Cell, k: string) => {
@@ -461,7 +474,7 @@ export class ChamCongController {
     }
     for (let rr = H1; rr <= r; rr++) for (let c = 1; c <= tongCot; c++) ws.getCell(rr, c).border = { ...ChamCongController.VIEN };
 
-    // Chữ ký
+    // Chữ ký Sheet 1
     const k = r + 2;
     bao(k, cs - 6, tongCot, `Hải Phòng, ngày ${' '.repeat(6)} tháng ${' '.repeat(6)} năm ${q.nam}`, { font: { italic: true }, alignment: { horizontal: 'center' } });
     bao(k + 1, 1, 6, 'Người chấm công', { font: { bold: true }, alignment: { horizontal: 'center' } });
@@ -469,7 +482,7 @@ export class ChamCongController {
     bao(k + 1, cs - 6, tongCot, 'Ban giám hiệu', { font: { bold: true }, alignment: { horizontal: 'center' } });
     if (tdv) bao(k + 5, 12, 22, tdv.hoTen, { font: { bold: true }, alignment: { horizontal: 'center' } });
 
-    // Chú thích
+    // Chú thích Sheet 1
     const ct = k + 8;
     ws.getCell(ct, 2).value = 'Ký hiệu chấm công:';
     ws.getCell(ct, 2).font = { bold: true };
@@ -482,8 +495,157 @@ export class ChamCongController {
       ws.getCell(hang, cot + 7).font = { bold: true };
     });
     ws.getCell(ct + 7, 2).value = 'Nửa ngày ghi thêm "/2" (ví dụ P/2: nghỉ phép nửa ngày, nửa ngày còn lại làm việc).';
-    ws.getCell(ct + 8, 2).value = `Số công chuẩn của tháng: ${b.congChuan} ngày (T2–T6, kể cả ngày lễ). Công hưởng lương = lương thời gian + công tác, học tập + nghỉ khác.`;
+    ws.getCell(ct + 8, 2).value = 'Làm thêm giờ: Ngày thường ghi "+2h", "+3h"... hoặc "2h", "4h"; Thứ 7 & CN chấm "+" (8h), "+/2" (4h) hoặc ghi số giờ "4h", "8h". Hệ thống tự động tách sang sheet "Làm thêm giờ".';
+    ws.getCell(ct + 9, 2).value = `Số công chuẩn của tháng: ${b.congChuan} ngày (T2–T6, kể cả ngày lễ). Công hưởng lương = lương thời gian + công tác, học tập + nghỉ khác.`;
     ws.views = [{ state: 'frozen', xSplit: 3, ySplit: H4 }];
+
+    // ==========================================================
+    // SHEET 2: LÀM THÊM GIỜ (CHỈ XUẤT NHỮNG CÁN BỘ CÓ PHÁT SINH LÀM THÊM GIỜ)
+    // ==========================================================
+    const wsOt = wb.addWorksheet('Làm thêm giờ', {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 },
+    });
+
+    const rowsLamThem = b.rows.filter((row) => (row.tong.tongGioLamThem ?? 0) > 0);
+    const COT_NGAY_OT = 5; // Cột E (sau TT, Mã CB, Họ tên, Chức vụ)
+    const cuoiNgayOt = COT_NGAY_OT + 30; // 31 ngày (E đến AI)
+    const csOt = cuoiNgayOt + 1; // Cột AJ
+    const tongCotOt = csOt + 3; // Cột AM (Tổng 39 cột)
+
+    const baoOt = (rOtIdx: number, c1: number, c2: number, v: string, o: Partial<ExcelJS.Style> = {}) => {
+      wsOt.mergeCells(rOtIdx, c1, rOtIdx, c2);
+      const cell = wsOt.getCell(rOtIdx, c1);
+      cell.value = v;
+      Object.assign(cell, { style: { ...cell.style, ...o } });
+    };
+
+    baoOt(1, 1, 12, 'TRƯỜNG CAO ĐẲNG HÀNG HẢI VÀ ĐƯỜNG THỦY I', { font: { bold: true, size: 12 } });
+    baoOt(2, 1, 12, `BỘ PHẬN: ${b.donVi.ten.toUpperCase()}`, { font: { bold: true, size: 12 } });
+    baoOt(4, 1, tongCotOt, 'BẢNG CHẤM CÔNG LÀM THÊM GIỜ', { font: { bold: true, size: 16 }, alignment: { horizontal: 'center' } });
+    baoOt(5, 1, tongCotOt, `Tháng ${q.thang} năm ${q.nam}`, { font: { italic: true, size: 12 }, alignment: { horizontal: 'center' } });
+
+    const tieuDeOt = (r1: number, r2: number, c1: number, c2: number, v: string) => {
+      wsOt.mergeCells(r1, c1, r2, c2);
+      const cell = wsOt.getCell(r1, c1);
+      cell.value = v;
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.font = { bold: true };
+    };
+
+    tieuDeOt(H1, H4, 1, 1, 'TT');
+    tieuDeOt(H1, H4, 2, 2, 'Mã cán bộ (CCCD)');
+    tieuDeOt(H1, H4, 3, 3, 'Họ và tên');
+    tieuDeOt(H1, H4, 4, 4, 'Chức vụ');
+    tieuDeOt(H1, H1, COT_NGAY_OT, cuoiNgayOt, 'Ngày trong tháng (giờ làm thêm)');
+
+    for (let d = 1; d <= 31; d++) {
+      const col = COT_NGAY_OT + d - 1;
+      const hop = d <= SN;
+      const dh = wsOt.getCell(H2, col);
+      dh.value = hop ? d : '';
+      dh.alignment = { horizontal: 'center' };
+      dh.font = { bold: true };
+      const th = wsOt.getCell(H3, col);
+      th.value = hop ? TEN_THU[new Date(Date.UTC(q.nam, q.thang - 1, d)).getUTCDay()] : '';
+      th.alignment = { horizontal: 'center' };
+      th.font = { bold: true, color: { argb: hop && laCuoiTuan(q.nam, q.thang, d) ? 'FFC00000' : 'FF000000' } };
+      wsOt.getColumn(col).width = 4.2;
+    }
+
+    tieuDeOt(H1, H1, csOt, csOt + 3, 'Tổng số giờ làm thêm (h)');
+    tieuDeOt(H2, H4, csOt, csOt, 'Ngày thường (150%)');
+    tieuDeOt(H2, H4, csOt + 1, csOt + 1, 'Thứ 7, CN (200%)');
+    tieuDeOt(H2, H4, csOt + 2, csOt + 2, 'Ngày lễ (300%)');
+    tieuDeOt(H2, H4, csOt + 3, csOt + 3, 'Tổng cộng giờ');
+
+    wsOt.getRow(H1).height = 20;
+    wsOt.getRow(H4).height = 24;
+    [6, 16, 26, 12].forEach((w, i) => (wsOt.getColumn(i + 1).width = w));
+    for (let i = 0; i < 4; i++) wsOt.getColumn(csOt + i).width = 13;
+
+    let rOt = H4 + 1;
+    const dauOt = rOt;
+
+    if (rowsLamThem.length === 0) {
+      wsOt.mergeCells(rOt, 1, rOt, tongCotOt);
+      const cEmpty = wsOt.getCell(rOt, 1);
+      cEmpty.value = 'Trong tháng không có cán bộ, nhân viên phát sinh giờ làm thêm.';
+      cEmpty.font = { italic: true };
+      cEmpty.alignment = { horizontal: 'center', vertical: 'middle' };
+      wsOt.getRow(rOt).height = 30;
+      rOt++;
+    } else {
+      rowsLamThem.forEach((row, i) => {
+        wsOt.getCell(rOt, 1).value = i + 1;
+        wsOt.getCell(rOt, 2).value = row.maCanBo;
+        wsOt.getCell(rOt, 3).value = row.hoTen;
+        wsOt.getCell(rOt, 4).value = row.chucVu;
+
+        for (let d = 1; d <= 31; d++) {
+          const c = wsOt.getCell(rOt, COT_NGAY_OT + d - 1);
+          const ct = d <= SN ? row.tong.chiTietLamThem?.[d] : undefined;
+          if (ct) {
+            c.value = ct.nhan || `${ct.gio}h`;
+            c.font = { bold: true, color: { argb: ct.loai === 'CUOI_TUAN' ? 'FFC00000' : (ct.loai === 'NGAY_LE' ? 'FF7030A0' : 'FF1F4E79') } };
+          } else {
+            c.value = null;
+          }
+          c.alignment = { horizontal: 'center' };
+          if (d <= SN && laCuoiTuan(q.nam, q.thang, d)) {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+          }
+        }
+
+        const t = row.tong;
+        wsOt.getCell(rOt, csOt).value = t.gioLamThemNgayThuong || null;
+        wsOt.getCell(rOt, csOt + 1).value = t.gioLamThemCuoiTuan || null;
+        wsOt.getCell(rOt, csOt + 2).value = t.gioLamThemNgayLe || null;
+        wsOt.getCell(rOt, csOt + 3).value = t.tongGioLamThem || null;
+
+        wsOt.getCell(rOt, 1).alignment = { horizontal: 'center' };
+        wsOt.getCell(rOt, 2).alignment = { horizontal: 'center' };
+        wsOt.getCell(rOt, 4).alignment = { horizontal: 'center' };
+        for (let c = csOt; c <= csOt + 3; c++) {
+          wsOt.getCell(rOt, c).alignment = { horizontal: 'center' };
+          wsOt.getCell(rOt, c).font = { bold: c === csOt + 3 };
+        }
+        rOt++;
+      });
+
+      const cuoiOt = rOt - 1;
+      wsOt.getCell(rOt, 3).value = 'Tổng cộng';
+      wsOt.getCell(rOt, 3).font = { bold: true };
+      for (let c = csOt; c <= csOt + 3; c++) {
+        const L = wsOt.getColumn(c).letter;
+        wsOt.getCell(rOt, c).value = { formula: `SUM(${L}${dauOt}:${L}${cuoiOt})` };
+        wsOt.getCell(rOt, c).font = { bold: true };
+        wsOt.getCell(rOt, c).alignment = { horizontal: 'center' };
+      }
+    }
+
+    for (let rr = H1; rr <= rOt; rr++) {
+      for (let c = 1; c <= tongCotOt; c++) {
+        wsOt.getCell(rr, c).border = { ...ChamCongController.VIEN };
+      }
+    }
+
+    // Chữ ký Sheet 2
+    const kOt = rOt + 2;
+    baoOt(kOt, csOt - 6, tongCotOt, `Hải Phòng, ngày ${' '.repeat(6)} tháng ${' '.repeat(6)} năm ${q.nam}`, { font: { italic: true }, alignment: { horizontal: 'center' } });
+    baoOt(kOt + 1, 1, 6, 'Người lập bảng', { font: { bold: true }, alignment: { horizontal: 'center' } });
+    baoOt(kOt + 1, 12, 22, tdv ? (b.donVi.ten.toLowerCase().includes('khoa') ? 'Trưởng khoa' : 'Trưởng đơn vị') : 'Trưởng đơn vị', { font: { bold: true }, alignment: { horizontal: 'center' } });
+    baoOt(kOt + 1, csOt - 6, tongCotOt, 'Ban giám hiệu duyệt', { font: { bold: true }, alignment: { horizontal: 'center' } });
+    if (tdv) baoOt(kOt + 5, 12, 22, tdv.hoTen, { font: { bold: true }, alignment: { horizontal: 'center' } });
+
+    // Ghi chú pháp lý Sheet 2
+    const ctOt = kOt + 8;
+    wsOt.getCell(ctOt, 2).value = 'Ghi chú chế độ làm thêm giờ:';
+    wsOt.getCell(ctOt, 2).font = { bold: true };
+    wsOt.getCell(ctOt + 1, 2).value = '• Làm thêm ngày thường (T2–T6): Tính ít nhất bằng 150% đơn giá tiền lương (Điều 98 BLLĐ 2019 & TTLT 08/2005/TTLT-BNV-BTC).';
+    wsOt.getCell(ctOt + 2, 2).value = '• Làm thêm ngày Thứ 7, Chủ nhật: Tính ít nhất bằng 200% đơn giá tiền lương ngày nghỉ hằng tuần.';
+    wsOt.getCell(ctOt + 3, 2).value = '• Làm thêm ngày Lễ, Tết: Tính ít nhất bằng 300% đơn giá tiền lương (chưa kể lương ngày lễ hưởng nguyên lương).';
+    wsOt.views = [{ state: 'frozen', xSplit: 3, ySplit: H4 }];
+
     guiFile(res, Buffer.from(await wb.xlsx.writeBuffer()), `ChamCong_${b.donVi.ma ?? 'DV'}_${q.thang}_${q.nam}.xlsx`);
   }
 
@@ -497,19 +659,20 @@ export class ChamCongController {
     });
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet(`Tổng hợp T${q.thang}.${q.nam}`);
-    ws.mergeCells('A1:O1');
-    ws.getCell('A1').value = `TỔNG HỢP CÔNG THÁNG ${q.thang}/${q.nam} (DÙNG TÍNH LƯƠNG)`;
+    ws.mergeCells('A1:S1');
+    ws.getCell('A1').value = `TỔNG HỢP CÔNG VÀ LÀM THÊM GIỜ THÁNG ${q.thang}/${q.nam} (DÙNG TÍNH LƯƠNG)`;
     ws.getCell('A1').font = { bold: true, size: 14 };
     ws.getCell('A1').alignment = { horizontal: 'center' };
     const tieu = [
       'STT', 'Mã cán bộ (CCCD)', 'Họ và tên', 'Đơn vị', 'Chức vụ', 'Công chuẩn', 'Lương thời gian', 'Công tác, học tập',
       'Nghỉ phép', 'Nghỉ khác (lễ, bù…)', 'Nghỉ BHXH', 'Nghỉ không lương', 'Công hưởng lương', 'Lương khoán', 'Theo QĐ',
+      'Giờ thêm ngày thường (150%)', 'Giờ thêm T7-CN (200%)', 'Giờ thêm Lễ (300%)', 'Tổng giờ thêm',
     ];
     ws.getRow(3).values = tieu;
     ws.getRow(3).font = { bold: true };
     ws.getRow(3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     ws.getRow(3).height = 34;
-    [6, 18, 26, 30, 10, 10, 12, 12, 10, 14, 10, 12, 12, 12, 10].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    [6, 18, 26, 30, 10, 10, 12, 12, 10, 14, 10, 12, 12, 12, 10, 14, 14, 14, 14].forEach((w, i) => (ws.getColumn(i + 1).width = w));
     let stt = 0;
     const chuan = congChuanThang(q.nam, q.thang);
     for (const dv of donVis) {
@@ -520,6 +683,7 @@ export class ChamCongController {
         ws.addRow([
           ++stt, row.maCanBo, row.hoTen, dv.ten, row.chucVu, chuan, t.luongThoiGian, t.congTacHocTap, nghiPhep,
           t.nghiKhac - nghiPhep, t.nghiBhxh, t.nghiKhongLuong, t.huongLuong, row.luongKhoan, row.theoQuyetDinh,
+          t.gioLamThemNgayThuong || '', t.gioLamThemCuoiTuan || '', t.gioLamThemNgayLe || '', t.tongGioLamThem || '',
         ]);
       }
     }

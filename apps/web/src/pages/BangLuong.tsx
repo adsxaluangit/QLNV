@@ -217,7 +217,7 @@ export default function BangLuong() {
                 }}
                 id="nut-xuat-bang-luong-chinh"
               >
-                📗 Xuất Bảng lương Tháng (Kèm HĐ111)
+                📗 Xuất Bảng lương Tháng (Kèm HĐ111 & Làm thêm giờ)
               </Button>
               <Button
                 size="large"
@@ -362,7 +362,7 @@ export default function BangLuong() {
                   </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="Các sheet trong file tải về">
-                  <b>1. Bảng Lương T10-2026 | 2. HĐ111 | 3. TH_Theo_Don_Vi | 4. TH_Dien_Bien_4_Quy</b>
+                  <b>1. Bảng Lương T10-2026 | 2. HĐ111 | 3. Làm thêm giờ | 4. TH_Theo_Don_Vi | 5. TH_Dien_Bien_4_Quy</b>
                 </Descriptions.Item>
               </Descriptions>
 
@@ -378,6 +378,9 @@ export default function BangLuong() {
                       </li>
                       <li>
                         <strong>Sheet HĐ111</strong>: Lao động hợp đồng cố định chi trả qua Kho bạc (đóng 10.5% BHXH) và qua Ngân hàng (không đóng BHXH).
+                      </li>
+                      <li>
+                        <strong>Sheet Làm thêm giờ</strong>: Tự động trích xuất các cán bộ có phát sinh làm thêm giờ từ Bảng chấm công, tính tiền làm thêm giờ theo quy định (150% ngày thường, 200% thứ 7 & CN, 300% ngày lễ) và chỉ hiển thị riêng những người có làm thêm giờ.
                       </li>
                       <li>
                         <strong>Sheet Tổng hợp Quý - Năm</strong>: Tổng hợp quỹ lương các phòng khoa theo Quý và cả Năm 2026.

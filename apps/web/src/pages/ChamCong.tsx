@@ -13,6 +13,10 @@ interface Tong {
   nghiBhxh: number;
   nghiKhongLuong: number;
   huongLuong: number;
+  gioLamThemNgayThuong?: number;
+  gioLamThemCuoiTuan?: number;
+  gioLamThemNgayLe?: number;
+  tongGioLamThem?: number;
 }
 interface Dong {
   nhanSuId: string;
@@ -52,6 +56,7 @@ const LOP_KY_HIEU = (k: string) => {
   if (['Ô', 'Cô', 'T', 'Ts'].includes(g)) return 'cc-k-bhxh';
   if (g === 'No') return 'cc-k-no';
   if (g === '+') return '';
+  if (k.includes('h') || ['T7', 'CN', 'L+'].includes(k) || /^OT\d/i.test(k) || /^\+\d/.test(k)) return 'cc-k-ot';
   return 'cc-k-nghi';
 };
 /** Phím tắt: gõ ký hiệu để chấm các ô đang chọn. */
@@ -206,7 +211,8 @@ export default function ChamCong() {
     no: a.no + r.tong.nghiKhongLuong,
     bh: a.bh + r.tong.nghiBhxh,
     hl: a.hl + r.tong.huongLuong,
-  }), { tg: 0, ct: 0, nk: 0, no: 0, bh: 0, hl: 0 });
+    ot: a.ot + (r.tong.tongGioLamThem ?? 0),
+  }), { tg: 0, ct: 0, nk: 0, no: 0, bh: 0, hl: 0, ot: 0 });
   const laQuanLy = nguoiDung && ['QUAN_TRI', 'TCHC', 'KE_TOAN', 'BAN_GIAM_HIEU'].includes(nguoiDung.vaiTro);
 
   return (
@@ -284,6 +290,18 @@ export default function ChamCong() {
           <Tooltip title="Nghỉ nửa ngày: giữ ô, chọn ký hiệu rồi thêm /2 qua nút bên cạnh">
             <Button size="small" disabled={!chon.size} onClick={() => ap('P/2')}>P/2</Button>
           </Tooltip>
+          <Tooltip title="Làm thêm ngày thường 2 giờ (hưởng 150%)">
+            <Button size="small" disabled={!chon.size} onClick={() => ap('+2h')}>+2h</Button>
+          </Tooltip>
+          <Tooltip title="Làm thêm ngày thường 3 giờ (hưởng 150%)">
+            <Button size="small" disabled={!chon.size} onClick={() => ap('+3h')}>+3h</Button>
+          </Tooltip>
+          <Tooltip title="Làm thêm 4 giờ (T7/CN: 200%, Ngày lễ: 300%)">
+            <Button size="small" disabled={!chon.size} onClick={() => ap('4h')}>4h</Button>
+          </Tooltip>
+          <Tooltip title="Làm thêm 8 giờ cả ngày (T7/CN: 200%, Ngày lễ: 300%)">
+            <Button size="small" disabled={!chon.size} onClick={() => ap('8h')}>8h</Button>
+          </Tooltip>
           <Button size="small" danger disabled={!chon.size} onClick={() => ap(null)}>Xóa ô</Button>
           <span style={{ color: '#64748b', fontSize: 12 }}>Phím tắt: + P C(CT) H L O(Ô) S(Ts) N(No) B(Nb) · Delete = xóa</span>
         </div>
@@ -310,6 +328,7 @@ export default function ChamCong() {
               <th className="cc-tong">Hưởng lương</th>
               <th className="cc-tong" style={{ minWidth: 110 }}>Lương khoán</th>
               <th className="cc-tong" style={{ minWidth: 90 }}>Theo QĐ</th>
+              <th className="cc-tong" style={{ minWidth: 80, color: '#c2410c' }} title="Tổng số giờ làm thêm trong tháng (ngày thường + T7/CN + lễ)">Làm thêm</th>
             </tr>
           </thead>
           <tbody>
@@ -374,6 +393,9 @@ export default function ChamCong() {
                     }}
                   />
                 </td>
+                <td className="cc-tong" style={{ color: r.tong.tongGioLamThem ? '#c2410c' : undefined, fontWeight: r.tong.tongGioLamThem ? 700 : undefined }}>
+                  {so(r.tong.tongGioLamThem ?? 0)}
+                </td>
               </tr>
             ))}
             {b && tongCot && (
@@ -389,6 +411,7 @@ export default function ChamCong() {
                 <td className="cc-tong">{so(tongCot.bh)}</td>
                 <td className="cc-tong">{so(tongCot.hl)}</td>
                 <td /><td />
+                <td className="cc-tong" style={{ color: '#c2410c' }}>{so(tongCot.ot)}</td>
               </tr>
             )}
           </tbody>
@@ -401,6 +424,8 @@ export default function ChamCong() {
             <span key={k.ma} style={{ marginRight: 12 }}><b>{k.ma}</b> {k.ten}</span>
           ))}
           · hậu tố <b>/2</b> = nghỉ nửa ngày.
+          <br />
+          · <b>Làm thêm giờ (OT):</b> Ngày thường (<b>+2h, +3h...</b> 150%), Thứ 7 & CN (<b>+, +/2, 4h, 8h</b> 200%), Ngày lễ (<b>L+, 4h, 8h</b> 300%). Khi bấm <b>Xuất Excel</b>, hệ thống sẽ tự động xuất kèm <b>Sheet "Làm thêm giờ"</b> chi tiết cho các cán bộ có làm thêm giờ.
         </div>
       )}
     </Card>
