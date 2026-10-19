@@ -13,6 +13,32 @@ import {
 } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { Response } from 'express';
+
+// Va loi OpenXML schema cua ExcelJS (outlinePr bat buoc dung truoc pageSetUpPr trong sheetPr)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const SheetPropertiesXform = require('exceljs/lib/xlsx/xform/sheet/sheet-properties-xform');
+  if (SheetPropertiesXform?.prototype) {
+    SheetPropertiesXform.prototype.render = function (xmlStream: any, model: any) {
+      if (model) {
+        xmlStream.addRollback();
+        xmlStream.openNode('sheetPr');
+
+        let inner = false;
+        inner = this.map.tabColor.render(xmlStream, model.tabColor) || inner;
+        inner = this.map.outlinePr.render(xmlStream, model.outlineProperties) || inner;
+        inner = this.map.pageSetUpPr.render(xmlStream, model.pageSetup) || inner;
+
+        if (inner) {
+          xmlStream.closeNode();
+          xmlStream.commit();
+        } else {
+          xmlStream.rollback();
+        }
+      }
+    };
+  }
+} catch {}
 import { z } from 'zod';
 import { PrismaService } from '../prisma.service';
 import { AuditService, khacBiet } from '../common/audit.service';
