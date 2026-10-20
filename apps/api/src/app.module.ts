@@ -8,6 +8,7 @@ import { ScopeService } from './common/scope.service';
 import { AuthController } from './auth/auth.controller';
 import { ChucVuController, CoSoController, DonViController } from './to-chuc/to-chuc.controller';
 import { HoSoConController, NhanSuController } from './nhan-su/nhan-su.controller';
+import { BoNhiemController } from './nhan-su/bo-nhiem.controller';
 import { TaiLieuNhanSuController } from './nhan-su/tai-lieu.controller';
 import { NhanSuService } from './nhan-su/nhan-su.service';
 import { ExcelService } from './nhan-su/excel.service';
@@ -39,6 +40,7 @@ if (!jwtSecret && process.env.NODE_ENV === 'production') {
     ChucVuController,
     NhanSuController,
     HoSoConController,
+    BoNhiemController,
     TaiLieuNhanSuController,
     TaiKhoanController,
     ThongKeController,

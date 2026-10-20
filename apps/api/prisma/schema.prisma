@@ -94,10 +94,12 @@ model DonVi {
 }
 
 model ChucVu {
-  id      String   @id @default(uuid())
-  ten     String   @unique
-  thuTu   Int      @default(0)
-  nhanSus NhanSu[]
+  id        String   @id @default(uuid())
+  ten       String   @unique
+  thuTu     Int      @default(0)
+  laQuanLy  Boolean  @default(false)
+  capQuanLy Int      @default(0) // 1: BGH, 2: Trưởng/Phó Khoa/Phòng/TT, 3: Bộ môn/Tổ
+  nhanSus   NhanSu[]
 }
 
 /// Hồ sơ cán bộ. `id` là khóa nội bộ (không hiển thị); `maCanBo` = số CCCD
@@ -154,7 +156,12 @@ model NhanSu {
   ghiChu             String?
   /// Ảnh 3x4 (chân dung) dạng Data URL (data:image/...) hoặc đường dẫn ảnh
   anhDaiDien         String?
+  ngayBoNhiem        DateTime?         @db.Date
+  ngayHetHanBoNhiem  DateTime?         @db.Date
+  soQdBoNhiem        String?
+  lanBoNhiem         Int               @default(1)
   quaTrinhCongTacs   QuaTrinhCongTac[]
+  quaTrinhBoNhiems   QuaTrinhBoNhiem[]
   vanBangs           VanBang[]
   giaDinhs           QuanHeGiaDinh[]
   quaTrinhLuongs     QuaTrinhLuong[]
@@ -290,6 +297,26 @@ model QuaTrinhCongTac {
   createdAt   DateTime  @default(now())
 
   @@index([nhanSuId])
+}
+
+model QuaTrinhBoNhiem {
+  id            String    @id @default(uuid())
+  nhanSuId      String
+  nhanSu        NhanSu    @relation(fields: [nhanSuId], references: [id], onDelete: Cascade)
+  chucVu        String
+  donVi         String?
+  soQuyetDinh   String
+  ngayQuyetDinh DateTime  @db.Date
+  ngayHieuLuc   DateTime  @db.Date
+  ngayHetHan    DateTime? @db.Date
+  thoiHanNam    Int       @default(5)
+  loaiQuyetDinh String    @default("BO_NHIEM_LAN_DAU") // BO_NHIEM_LAN_DAU, BO_NHIEM_LAI, KEO_DAI, THOI_GIU_CHUC_VU
+  nguoiKy       String?
+  ghiChu        String?
+  createdAt     DateTime  @default(now())
+
+  @@index([nhanSuId])
+  @@index([ngayHetHan])
 }
 
 model VanBang {

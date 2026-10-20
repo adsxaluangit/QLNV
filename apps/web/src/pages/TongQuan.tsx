@@ -1,5 +1,17 @@
+interface CanBoDenHanBoNhiem {
+  id: string;
+  maCanBo: string;
+  hoTen: string;
+  tinhTrang: string;
+  soNgayConLaiNhiemKy: number | null;
+  moTa: string;
+  chucVu: { ten: string; capQuanLy: number } | null;
+  donVi: { ten: string } | null;
+  ngayHetHan: string | null;
+}
 import { Button, Card, Col, Empty, List, Row, Skeleton, Tag, Typography } from 'antd';
 import {
+  AuditOutlined,
   CalendarOutlined,
   FileProtectOutlined,
   GiftOutlined,
@@ -55,6 +67,10 @@ export default function TongQuan() {
   const { data, isLoading } = useQuery({ queryKey: ['tong-quan'], queryFn: () => api<TongQuanData>('/thong-ke/tong-quan') });
   const { data: denHan } = useQuery({ queryKey: ['nang-luong', 'den-han', 'mac-dinh'], queryFn: () => api<DongDenHan[]>('/nang-luong/den-han') });
   const { data: hopDong } = useQuery({ queryKey: ['hop-dong', 'sap-het-han'], queryFn: () => api<HopDongSapHet[]>('/hop-dong/sap-het-han') });
+  const { data: boNhiemDenHan } = useQuery({
+    queryKey: ['bo-nhiem', 'den-han'],
+    queryFn: () => api<CanBoDenHanBoNhiem[]>('/bo-nhiem/den-han'),
+  });
 
   if (isLoading || !data) return <Skeleton active paragraph={{ rows: 12 }} />;
 
@@ -129,19 +145,19 @@ export default function TongQuan() {
       </Row>
 
       <Row gutter={[20, 20]} style={{ marginTop: 20 }}>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={8}>
           <Card
             className="card-mem"
             styles={THAN_CUON}
             title={
               <>
-                <RiseOutlined /> Đến hạn nâng lương trong 3 tháng{' '}
+                <RiseOutlined /> Nâng lương trong 3 tháng{' '}
                 {denHan?.length ? <Tag color="green">{denHan.length}</Tag> : null}
               </>
             }
             extra={
               <Button type="link" onClick={() => nav('/nang-luong')} id="xem-nang-luong">
-                Xem & lập quyết định
+                Xem
               </Button>
             }
           >
@@ -163,7 +179,7 @@ export default function TongQuan() {
             />
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={8}>
           <Card
             className="card-mem"
             styles={THAN_CUON}
@@ -188,6 +204,48 @@ export default function TongQuan() {
                   <List.Item.Meta
                     title={<Link to={`/nhan-su/${x.nhanSuId}?tab=hop-dong`}>{x.hoTen}</Link>}
                     description={`${x.tenLoai}${x.soHopDong ? ` · số ${x.soHopDong}` : ''} · ${x.donVi}`}
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card
+            className="card-mem"
+            styles={THAN_CUON}
+            title={
+              <>
+                <AuditOutlined style={{ color: '#d97706' }} /> Bổ nhiệm lại CBQL (Mốc 90 ngày){' '}
+                {boNhiemDenHan?.length ? (
+                  <Tag color={boNhiemDenHan.some((b) => b.tinhTrang === 'QUA_HAN') ? 'red' : 'orange'}>
+                    {boNhiemDenHan.length}
+                  </Tag>
+                ) : null}
+              </>
+            }
+            extra={
+              <Button type="link" onClick={() => nav('/bo-nhiem')} id="xem-bo-nhiem">
+                Chi tiết & QĐ
+              </Button>
+            }
+          >
+            <List
+              locale={KHONG_CO}
+              dataSource={boNhiemDenHan ?? []}
+              renderItem={(x) => (
+                <List.Item
+                  extra={
+                    <Tag color={x.tinhTrang === 'QUA_HAN' ? 'error' : 'warning'}>
+                      {x.tinhTrang === 'QUA_HAN'
+                        ? `Quá ${Math.abs(x.soNgayConLaiNhiemKy ?? 0)} ngày`
+                        : `Còn ${x.soNgayConLaiNhiemKy} ngày`}
+                    </Tag>
+                  }
+                >
+                  <List.Item.Meta
+                    title={<Link to={`/nhan-su/${x.id}`}>{x.hoTen}</Link>}
+                    description={`${x.chucVu?.ten || ''} · ${x.donVi?.ten || ''}`}
                   />
                 </List.Item>
               )}

@@ -39,6 +39,7 @@ const MENU: Muc[] = [
   { key: '/', icon: <DashboardOutlined />, label: 'Tổng quan', vaiTro: QUAN_LY },
   { key: '/nhan-su', icon: <TeamOutlined />, label: 'Hồ sơ nhân sự', vaiTro: QUAN_LY },
   { key: '/to-chuc', icon: <ApartmentOutlined />, label: 'Cơ cấu tổ chức', vaiTro: QUAN_LY },
+  { key: '/bo-nhiem', icon: <AuditOutlined style={{ color: '#0e7c86' }} />, label: 'Bổ nhiệm lại CBQL', vaiTro: QUAN_LY },
   { key: '/nang-luong', icon: <RiseOutlined />, label: 'Nâng lương', vaiTro: QUAN_LY },
   { key: '/bang-luong', icon: <FileExcelOutlined style={{ color: '#10b981' }} />, label: 'Bảng thanh toán lương', vaiTro: QUAN_LY },
   { key: '/danh-muc-luong', icon: <TableOutlined />, label: 'Danh mục lương', vaiTro: QUAN_LY },
@@ -57,6 +58,7 @@ const TIEU_DE: [RegExp, string][] = [
   [/^\/nhan-su\/.+/, 'Hồ sơ cán bộ'],
   [/^\/nhan-su/, 'Hồ sơ nhân sự'],
   [/^\/to-chuc/, 'Cơ cấu tổ chức'],
+  [/^\/bo-nhiem/, 'Cán bộ quản lý & Bổ nhiệm lại (NĐ 115)'],
   [/^\/nang-luong/, 'Nâng bậc lương thường xuyên & vượt khung'],
   [/^\/bang-luong/, 'Bảng thanh toán tiền lương'],
   [/^\/danh-muc-luong/, 'Danh mục lương'],
@@ -81,6 +83,13 @@ export default function AppLayout() {
     refetchInterval: 60_000,
     queryFn: () => api<{ soLuong: number }>('/nghi-phep/don/cho-duyet/so-luong'),
   });
+  const boNhiemTk = useQuery({
+    queryKey: ['bo-nhiem', 'thong-ke'],
+    enabled: !!nguoiDung && QUAN_LY.includes(nguoiDung.vaiTro),
+    refetchInterval: 120_000,
+    queryFn: () => api<{ quaHan: number; denHan90Ngay: number }>('/bo-nhiem/thong-ke'),
+  });
+  const soBoNhiemCanhBao = (boNhiemTk.data?.quaHan ?? 0) + (boNhiemTk.data?.denHan90Ngay ?? 0);
   if (!nguoiDung) return null;
 
   const items = MENU.filter(
@@ -92,6 +101,10 @@ export default function AppLayout() {
       key === '/duyet-nghi-phep' ? (
         <span>
           {label} <Badge count={soCho.data?.soLuong ?? 0} size="small" offset={[6, -2]} />
+        </span>
+      ) : key === '/bo-nhiem' ? (
+        <span>
+          {label} <Badge count={soBoNhiemCanhBao} size="small" offset={[6, -2]} />
         </span>
       ) : (
         label

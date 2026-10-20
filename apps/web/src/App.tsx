@@ -10,6 +10,7 @@ import TongQuan from './pages/TongQuan';
 import NhanSuList from './pages/NhanSuList';
 import NhanSuChiTiet from './pages/NhanSuChiTiet';
 import ToChuc from './pages/ToChuc';
+import BoNhiem from './pages/BoNhiem';
 import TaiKhoan from './pages/TaiKhoan';
 import NhatKy from './pages/NhatKy';
 import NangLuong from './pages/NangLuong';
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="nhan-su/moi" element={<ChiCho vaiTro={['QUAN_TRI', 'TCHC']}><NhanSuChiTiet taoMoi /></ChiCho>} />
         <Route path="nhan-su/:id" element={<NhanSuChiTiet />} />
         <Route path="to-chuc" element={<ChiCho vaiTro={QUAN_LY}><ToChuc /></ChiCho>} />
+        <Route path="bo-nhiem" element={<ChiCho vaiTro={QUAN_LY}><BoNhiem /></ChiCho>} />
         <Route path="nang-luong" element={<ChiCho vaiTro={QUAN_LY}><NangLuong /></ChiCho>} />
         <Route path="bang-luong" element={<ChiCho vaiTro={QUAN_LY}><BangLuong /></ChiCho>} />
         <Route path="danh-muc-luong" element={<ChiCho vaiTro={QUAN_LY}><DanhMucLuong /></ChiCho>} />
