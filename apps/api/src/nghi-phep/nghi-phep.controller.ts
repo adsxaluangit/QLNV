@@ -628,6 +628,39 @@ export class NghiPhepController {
       where: { id },
       data: { trangThai: 'DA_HUY', duyets: { create: { taiKhoanId: u.id, nguoiDuyet: u.tenDangNhap, buoc: 'HUY', ketQua: 'HUY' } } },
     });
+
+    // Nếu nhân sự đang ở trạng thái TAM_NGHI, kiểm tra xem còn đơn nghỉ dài hạn đã duyệt nào khác không. Nếu không còn thì tự động khôi phục về DANG_LAM_VIEC
+    const nsHienTai = await this.prisma.nhanSu.findUnique({
+      where: { id: don.nhanSuId },
+      select: { trangThai: true, hoTen: true },
+    });
+    if (nsHienTai?.trangThai === 'TAM_NGHI') {
+      const coDonKhac = await this.prisma.donNghi.count({
+        where: {
+          nhanSuId: don.nhanSuId,
+          id: { not: id },
+          trangThai: 'DA_DUYET',
+          loai: 'KHONG_LUONG',
+          soNgay: { gte: NGHI_DAI_HAN },
+        },
+      });
+      if (coDonKhac === 0) {
+        await this.prisma.nhanSu.update({
+          where: { id: don.nhanSuId },
+          data: { trangThai: 'DANG_LAM_VIEC' },
+        });
+        await this.audit.ghi(
+          u,
+          'SUA',
+          'NhanSu',
+          don.nhanSuId,
+          `Khôi phục ${nsHienTai.hoTen} về Đang làm việc sau khi hủy đơn nghỉ dài hạn`,
+          undefined,
+          ip,
+        );
+      }
+    }
+
     await this.audit.ghi(u, 'SUA', 'DonNghi', id, `Hủy đơn nghỉ của ${don.nhanSu.hoTen} (${iso(don.tuNgay)} → ${iso(don.denNgay)})`, undefined, ip);
     return { ok: true };
   }
