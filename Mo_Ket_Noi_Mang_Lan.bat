@@ -15,13 +15,21 @@ echo   CẤU HÌNH MỞ TƯỜNG LỬA (FIREWALL) CHO MẠNG NỘI BỘ (LAN) - 
 echo ==============================================================================
 echo.
 
-:: 1. Mở Firewall cho Port 3100 (Docker Web Production)
+:: 1. Mở Firewall cho Port 3100 và Port 88 (Docker Web Production)
 netsh advfirewall firewall show rule name="QLNS_Web_3100" >nul 2>&1
 if %errorLevel% neq 0 (
     netsh advfirewall firewall add rule name="QLNS_Web_3100" dir=in action=allow protocol=TCP localport=3100 profile=any >nul
     echo [+] Đã mở Port 3100 (Web Production) trên Windows Firewall.
 ) else (
     echo [v] Port 3100 đã được mở trước đó.
+)
+
+netsh advfirewall firewall show rule name="QLNS_Web_88" >nul 2>&1
+if %errorLevel% neq 0 (
+    netsh advfirewall firewall add rule name="QLNS_Web_88" dir=in action=allow protocol=TCP localport=88 profile=any >nul
+    echo [+] Đã mở Port 88 (Web Domain qlns.mic1.edu.vn) trên Windows Firewall.
+) else (
+    echo [v] Port 88 đã được mở trước đó.
 )
 
 :: 2. Mở Firewall cho Port 5173 (Vite Dev Server)

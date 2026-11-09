@@ -52,6 +52,7 @@ services:
       - api
     ports:
       - "${WEB_PORT:-3100}:80"
+      - "88:80"
 
   # Sao lưu CSDL hằng ngày lúc 01:00, giữ 7 bản gần nhất (7 ngày) trong ./backups
   backup:
