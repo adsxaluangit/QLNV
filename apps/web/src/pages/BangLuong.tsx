@@ -333,36 +333,69 @@ export default function BangLuong() {
 
           <Col xs={24} md={16}>
             <Card title="📊 Thông tin tổng hợp bảng lương tháng" className="card-mem" style={{ height: '100%' }}>
-              <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
+              <Descriptions
+                bordered
+                size="middle"
+                column={{ xs: 1, sm: 2, md: 2, lg: 2, xl: 2, xxl: 2 }}
+                labelStyle={{
+                  width: 185,
+                  fontWeight: 500,
+                  backgroundColor: '#f8fafc',
+                  color: '#334155',
+                  whiteSpace: 'nowrap',
+                }}
+                contentStyle={{
+                  backgroundColor: '#ffffff',
+                  minWidth: 180,
+                }}
+              >
                 <Descriptions.Item label="Đơn vị thanh toán">
                   <b>Trường Cao đẳng Hàng hải và Đường thủy I</b>
                 </Descriptions.Item>
                 <Descriptions.Item label="Cơ quan chủ quản">
-                  Cục Hàng hải và Đường thủy Việt Nam
+                  <b>Cục Hàng hải và Đường thủy Việt Nam</b>
                 </Descriptions.Item>
                 <Descriptions.Item label="Kỳ lương">
-                  <Tag color="blue" style={{ fontSize: 13 }}>
+                  <Tag color="blue" style={{ fontSize: 13, margin: 0 }}>
                     Tháng {thang} năm {nam}
                   </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="Mức lương cơ sở">
-                  <Tag color="green" style={{ fontSize: 13, fontWeight: 600 }}>
+                  <Tag color="green" style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
                     {luongCoSo.toLocaleString('vi-VN')} đ/tháng
                   </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="Cán bộ viên chức (CBVC)">
-                  <Text strong style={{ color: '#0958d9' }}>238 người</Text> (14 đơn vị)
+                  <Text strong style={{ color: '#0958d9' }}>238 người</Text>{' '}
+                  <Text type="secondary">(14 đơn vị)</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Lao động hợp đồng (HĐ111)">
-                  <Text strong style={{ color: '#d46b08' }}>27 người</Text> (Kho bạc + Ngân hàng)
+                  <Text strong style={{ color: '#d46b08' }}>27 người</Text>{' '}
+                  <Text type="secondary">(Kho bạc + Ngân hàng)</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Tổng số lao động toàn trường">
-                  <Tag color="purple" style={{ fontSize: 13, fontWeight: 600 }}>
-                    265 cán bộ, giảng viên & người lao động
+                <Descriptions.Item label="Tổng số lao động" span={2}>
+                  <Tag color="purple" style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+                    265 cán bộ, giảng viên & người lao động toàn trường
                   </Tag>
                 </Descriptions.Item>
-                <Descriptions.Item label="Các sheet trong file tải về">
-                  <b>1. Bảng Lương T10-2026 | 2. HĐ111 | 3. Làm thêm giờ | 4. TH_Theo_Don_Vi | 5. TH_Dien_Bien_4_Quy</b>
+                <Descriptions.Item label="Các sheet trong file Excel" span={2}>
+                  <Space size={[6, 6]} wrap>
+                    <Tag color="cyan" style={{ margin: 0, fontWeight: 500 }}>
+                      1. Bảng Lương T{thang}-{nam}
+                    </Tag>
+                    <Tag color="orange" style={{ margin: 0, fontWeight: 500 }}>
+                      2. HĐ111
+                    </Tag>
+                    <Tag color="geekblue" style={{ margin: 0, fontWeight: 500 }}>
+                      3. Làm thêm giờ
+                    </Tag>
+                    <Tag color="green" style={{ margin: 0, fontWeight: 500 }}>
+                      4. TH_Theo_Don_Vi
+                    </Tag>
+                    <Tag color="purple" style={{ margin: 0, fontWeight: 500 }}>
+                      5. TH_Dien_Bien_4_Quy
+                    </Tag>
+                  </Space>
                 </Descriptions.Item>
               </Descriptions>
 
