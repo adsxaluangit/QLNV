@@ -28,3 +28,4 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding.
+
