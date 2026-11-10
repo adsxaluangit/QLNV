@@ -40,6 +40,8 @@ export class ThongKeController {
         loaiNhanSu: true,
         trinhDoChuyenMon: true,
         laGiangVien: true,
+        chucDanhNgheNghiep: true,
+        chucVu: { select: { ten: true } },
         donVi: { select: { ten: true, coSo: { select: { ten: true } } } },
       },
     });
@@ -88,9 +90,17 @@ export class ThongKeController {
       take: 50,
     });
 
+    const maNgachChuyenVien = new Set(['01.001', '01.002', '01.003']);
+    const soChuyenVien = ds.filter((n) => {
+      const cv = (n.chucVu?.ten ?? '').toLowerCase();
+      const cd = (n.chucDanhNgheNghiep ?? '').trim();
+      return cv.includes('chuyên viên') || maNgachChuyenVien.has(cd) || cd.toLowerCase().includes('chuyên viên');
+    }).length;
+
     return {
       tongSo: ds.length,
       soGiangVien: ds.filter((n) => n.laGiangVien).length,
+      soChuyenVien,
       theoGioiTinh: demTheo(ds, (n) => n.gioiTinh),
       theoLoai: demTheo(ds, (n) => n.loaiNhanSu),
       theoTrinhDo: demTheo(ds, (n) => n.trinhDoChuyenMon),

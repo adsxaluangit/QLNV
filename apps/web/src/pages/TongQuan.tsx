@@ -15,6 +15,7 @@ import {
   CalendarOutlined,
   FileProtectOutlined,
   GiftOutlined,
+  IdcardOutlined,
   ReadOutlined,
   RiseOutlined,
   SafetyCertificateOutlined,
@@ -31,6 +32,7 @@ import type { DongDenHan, HopDongSapHet } from './NangLuong';
 interface TongQuanData {
   tongSo: number;
   soGiangVien: number;
+  soChuyenVien: number;
   theoGioiTinh: Record<string, number>;
   theoLoai: Record<string, number>;
   theoTrinhDo: Record<string, number>;
@@ -124,25 +126,18 @@ export default function TongQuan() {
         </div>
       </div>
 
-      <Row gutter={[20, 20]}>
-        <Col xs={24} sm={12} xl={6}>
-          <TheSo icon={<TeamOutlined />} so={data.tongSo} nhan="Cán bộ đang làm việc" mau="#0e7c86" />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <TheSo icon={<ReadOutlined />} so={data.soGiangVien} nhan="Giảng viên" mau="#6366f1" />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <TheSo
-            icon={<SafetyCertificateOutlined />}
-            so={data.tongSo ? `${Math.round((saudh / data.tongSo) * 100)}%` : '0%'}
-            nhan={`Trình độ sau đại học (${saudh} người)`}
-            mau="#f59e0b"
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <TheSo icon={<UserSwitchOutlined />} so={vienChuc} nhan="Viên chức" mau="#ec4899" />
-        </Col>
-      </Row>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
+        <TheSo icon={<TeamOutlined />} so={data.tongSo} nhan="Cán bộ đang làm việc" mau="#0e7c86" />
+        <TheSo icon={<ReadOutlined />} so={data.soGiangVien} nhan="Giảng viên" mau="#6366f1" />
+        <TheSo icon={<IdcardOutlined />} so={data.soChuyenVien ?? 0} nhan="Chuyên viên" mau="#10b981" />
+        <TheSo
+          icon={<SafetyCertificateOutlined />}
+          so={data.tongSo ? `${Math.round((saudh / data.tongSo) * 100)}%` : '0%'}
+          nhan={`Trình độ sau đại học (${saudh} người)`}
+          mau="#f59e0b"
+        />
+        <TheSo icon={<UserSwitchOutlined />} so={vienChuc} nhan="Viên chức" mau="#ec4899" />
+      </div>
 
       <Row gutter={[20, 20]} style={{ marginTop: 20 }}>
         <Col xs={24} lg={8}>
